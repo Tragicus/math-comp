@@ -1,4 +1,3 @@
-
 (* (c) Copyright 2006-2016 Microsoft Corporation and Inria.                  *)
 (* Distributed under the terms of CeCILL-B.                                  *)
 From mathcomp Require Import ssreflect ssrbool ssrfun eqtype ssrnat seq choice.
@@ -36,8 +35,8 @@ From mathcomp Require Import div prime binomial ssralg finalg zmodp countalg.
 (*     map_mx f A == the pointwise image of A by f, i.e., the matrix Af       *)
 (*                   congruent to A with Af i j = f (A i j) for all i and j.  *)
 (*     map2_mx f A B == the pointwise image of A and B by f, i.e., the matrix *)
-(*                     ABf congruent to A with ABf i j = f (A i j) for all i  *)
-(*                     and j.                                                 *)
+(*                     ABf congruent to A with ABf i j = f (A i j) (B i j)    *)
+(*                     for all i and j.                                       *)
 (*            A^T == the matrix transpose of A.                               *)
 (*        row i A == the i'th row of A (this is a row vector).                *)
 (*        col j A == the j'th column of A (a column vector).                  *)
