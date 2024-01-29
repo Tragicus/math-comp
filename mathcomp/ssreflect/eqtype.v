@@ -774,16 +774,9 @@ Proof. by move=> f_inj x y; apply: (iffP eqP) => [|-> //]; apply: f_inj. Qed.
 HB.instance Definition _ T (eT : eqType) (f : T -> eT) (f_inj : injective f) := hasDecEq.Build (inj_type f_inj)
   (inj_eqAxiom f_inj).
 
-(* TODO: `Equality.phant_on_ _ (Phant (inj_type (pcan_inj fK))) : Equality.axioms_ (pcan_type fK)` elaborates
-  `@Equality.generic_type (inj_type (@pcan_inj fK)) ?a`
-  with `?a : Equality.axioms_ (pcan_type fK)`.
-  Why is it not `?a : Equality.axioms_ (inj_type (pcan_inj fK))? *)
-HB.instance Definition _ T (eT : eqType) (f : T -> eT) g (fK : pcancel f g) :=
-  (Equality.phant_on_ (Phant (inj_type (pcan_inj fK))) : Equality.axioms_ (inj_type (pcan_inj fK))) : Equality.axioms_ (pcan_type fK).
+HB.instance Definition _ T (eT : eqType) (f : T -> eT) g (fK : pcancel f g) := Equality.copy (pcan_type fK) (inj_type (pcan_inj fK)).
 
-(* TODO: idem here, except that this triggers an infinite loop... *)
-HB.instance Definition _ T (eT : eqType) (f : T -> eT) g (fK : cancel f g) :=
-  (Equality.phant_on_ (Phant (inj_type (can_inj fK))) : Equality.axioms_ (inj_type (can_inj fK))) : Equality.axioms_ (can_type fK).
+HB.instance Definition _ T (eT : eqType) (f : T -> eT) g (fK : cancel f g) := Equality.copy (can_type fK) (inj_type (can_inj fK)).
 
 Definition deprecated_InjEqMixin T (eT : eqType) (f : T -> eT) (f_inj : injective f) := hasDecEq.Build T (inj_eqAxiom f_inj).
 Definition deprecated_PcanEqMixin T (eT : eqType) (f : T -> eT) g (fK : pcancel f g) :=
@@ -824,18 +817,17 @@ Section SubEqType.
 Local Notation ev_ax := (fun T v => @Equality.axiom T (fun x y => v x == v y)).
 Lemma val_eqP (T : eqType) (P : pred T) (sT : subType P) : ev_ax sT val. Proof. exact: inj_eqAxiom val_inj. Qed.
 
-(* TODO: there was a `#[hnf]` here, but it breaks the following lines. *)
+#[hnf]
 HB.instance Definition _ (T : eqType) (P : pred T) (sT : subType P) :=
   (Equality.phant_on_ (Phant (pcan_type valK)) : Equality.axioms_ (pcan_type valK)) : Equality.axioms_ (sub_type sT).
 
 End SubEqType.
 
-(* TODO: restore the following when the next TODO is resolved.
-Lemma val_eqE (T : eqType) (P : pred T) (sT : subEqType P)
+(* TODO: see log#29/01/2024
+Timeout 1 Lemma val_eqE (T : eqType) (P : pred T) (sT : subEqType P)
    (u v : sT) : (val u == val v :> T) = (u == v :> sT).
-   Proof. exact/val_eqP/eqP. Qed. *)
+   Proof. exact/val_eqP/eqP. Qed.
 
-(* What is happening here??? (see log (29/11/2023))
 Lemma val_eqE (T : eqType) (P : pred T) (sT : subType P)
    (u v : sT) : @eq_op T (val u) (val v) = @eq_op (@Equality.generic_type (sub_type sT) _) u v.
 Proof. exact/val_eqP/eqP. Qed. *)
@@ -851,6 +843,10 @@ Notation "[ 'eqMixin' 'of' T 'by' <: ]" := [Equality of T%type by <:]
 
 (* TODO: As before. *)
 HB.instance Definition _ := (Equality.phant_on_ (Phant (pcan_type (of_voidK unit))) : Equality.axioms_ (pcan_type (of_voidK unit))) : Equality.axioms_ void.
+Elpi Command foo.
+Elpi Query lp:{{
+  coq.say "anchor".
+}}.
 HB.instance Definition _ (T : eqType) (P : pred T) :=
   [Equality of {x | P x} by <:].
 

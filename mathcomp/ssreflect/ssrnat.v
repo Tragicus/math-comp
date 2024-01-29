@@ -485,11 +485,13 @@ Proof.
 elim/ltn_ind: n => n IHn in le_mn1 le_mn2 *; set n1 := n in le_mn1 *.
 pose def_n : n = n1 := erefl n; transitivity (eq_ind _ _ le_mn2 _ def_n) => //.
 case: n1 / le_mn1 le_mn2 => [|n1 le_mn1] {n}[|n le_mn2] in (def_n) IHn *.
-- by rewrite [def_n]eq_axiomK.
+(* TODO: the nat annotation should not be needed. *)
+- by rewrite [def_n](@eq_axiomK nat).
 - by case/leP/idPn: (le_mn2); rewrite -def_n ltnn.
 - by case/leP/idPn: (le_mn1); rewrite def_n ltnn.
 case: def_n (def_n) => <-{n1} def_n in le_mn1 *.
-by rewrite [def_n]eq_axiomK /=; congr le_S; apply: IHn.
+(* TODO: idem. *)
+by rewrite [def_n](@eq_axiomK nat) /=; congr le_S; apply: IHn.
 Qed.
 
 Lemma ltP m n : reflect (m < n)%coq_nat (m < n).
