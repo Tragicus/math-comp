@@ -3050,7 +3050,7 @@ Variables (D D' : {pred T}) (f : T -> T').
 
 Let leT_anti := @le_anti _ T.
 Let leT'_anti := @le_anti _ T'.
-Hint Resolve lexx lt_neqAle lt_neqAle : core.
+Hint Resolve lexx lt_neqAle lt_def : core.
 
 Let ge_antiT : antisymmetric (>=%O : rel T).
 Proof. by move=> ? ? /le_anti. Qed.
@@ -4105,7 +4105,7 @@ Let leT_anti    := @le_anti _ T.
 Let leT'_anti   := @le_anti _ T'.
 Let ltT_neqAle  := @lt_neqAle _ T.
 Let ltT'_neqAle := @lt_neqAle _ T'.
-Let ltT_def     := @lt_le_def _ T.
+Let ltT_def     := @lt_def _ T.
 Let leT_total   := @le_total _ T.
 
 Lemma le_mono : {homo f : x y / x < y} -> {mono f : x y / x <= y}.
@@ -4884,7 +4884,7 @@ HB.factory Record isMeetJoinDistrLattice (d : unit) T of Choice T := {
   meet : T -> T -> T;
   join : T -> T -> T;
   le_def : forall x y : T, le x y = (meet x y == x);
-  lt_neqAle : forall x y : T, lt x y = (y != x) && le x y;
+  lt_def : forall x y : T, lt x y = (y != x) && le x y;
   meetC : commutative meet;
   joinC : commutative join;
   meetA : associative meet;
@@ -4911,7 +4911,7 @@ Qed.
 
 Fact lt_le_def x y : lt x y = (le x y) && ~~ (le y x).
 Proof.
-rewrite lt_neqAle andbC; case/boolP: (le x y) => //= xy.
+rewrite lt_def andbC; case/boolP: (le x y) => //= xy.
 congr negb; apply/eqP/idP => [->|yx]; first exact/le_refl.
 by apply/le_anti/andP; split.
 Qed.
@@ -5004,7 +5004,7 @@ HB.factory Record isOrder (d : unit) T of Choice T := {
   lt : rel T;
   meet : T -> T -> T;
   join : T -> T -> T;
-  lt_neqAle : forall x y, lt x y = (y != x) && le x y;
+  lt_def : forall x y, lt x y = (y != x) && le x y;
   meet_def : forall x y, meet x y = if lt x y then x else y;
   join_def : forall x y, join x y = if lt x y then y else x;
   le_anti : antisymmetric le;
@@ -5019,7 +5019,7 @@ Proof. by move=> x; case: (le x x) (le_total x x). Qed.
 
 Fact lt_le_def x y : lt x y = (le x y) && ~~ (le y x).
 Proof.
-rewrite lt_neqAle andbC; case/boolP: (le x y) => //= xy.
+rewrite lt_def andbC; case/boolP: (le x y) => //= xy.
 congr negb; apply/eqP/idP => [->|yx]; first exact/le_refl.
 by apply/le_anti/andP; split.
 Qed.
@@ -5081,14 +5081,14 @@ HB.factory Record LtOrder (d : unit) T of Choice T := {
 HB.builders
   Context d T of LtOrder d T.
 
-Fact lt_neqAle x y : lt x y = (y != x) && le x y.
+Fact lt_def x y : lt x y = (y != x) && le x y.
 Proof. by rewrite le_def; case: eqVneq => //= ->; rewrite lt_irr. Qed.
 
 Fact meet_def_le x y : meet x y = if lt x y then x else y.
-Proof. by rewrite meet_def lt_neqAle; case: eqP. Qed.
+Proof. by rewrite meet_def lt_def; case: eqP. Qed.
 
 Fact join_def_le x y : join x y = if lt x y then y else x.
-Proof. by rewrite join_def lt_neqAle; case: eqP. Qed.
+Proof. by rewrite join_def lt_def; case: eqP. Qed.
 
 Fact le_anti : antisymmetric le.
 Proof.
@@ -5106,7 +5106,7 @@ Fact le_total : total le.
 Proof. by move=> x y; rewrite !le_def; case: eqVneq => //; exact: lt_total. Qed.
 
 HB.instance Definition _ :=
-  isOrder.Build d T lt_neqAle meet_def_le join_def_le le_anti le_trans le_total.
+  isOrder.Build d T lt_def meet_def_le join_def_le le_anti le_trans le_total.
 HB.end.
 
 HB.factory Record MonoTotal disp T of POrder disp T := {
@@ -8010,6 +8010,9 @@ End CTBDistrLattice.
 
 (* FIXME *)
 #[export]
+HB.instance Definition _ (n : nat) (T : finPreorderType disp) :=
+  Preorder.on (n.-tuple T).
+#[export]
 HB.instance Definition _ (n : nat) (T : finPOrderType disp) :=
   POrder.on (n.-tuple T).
 #[export]
@@ -8255,8 +8258,8 @@ Module DefaultTupleLexiOrder.
 Section DefaultTupleLexiOrder.
 Context {disp : unit}.
 
-HB.instance Definition _ n (T : porderType disp) :=
-  POrder.copy (n.-tuple T) (n.-tuplelexi T).
+HB.instance Definition _ n (T : preorderType disp) :=
+  Preorder.copy (n.-tuple T) (n.-tuplelexi T).
 HB.instance Definition _ n (T : porderType disp) :=
   POrder.copy (n.-tuple T) (n.-tuplelexi T).
 HB.instance Definition _ n (T : finPOrderType disp) :=
@@ -8739,6 +8742,7 @@ Export Order.Exports.
 
 Export Order.Syntax.
 
+Export Order.Preorder.Exports.
 Export Order.POrder.Exports.
 Export Order.FinPOrder.Exports.
 Export Order.Lattice.Exports.
