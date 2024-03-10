@@ -802,7 +802,15 @@ Notation "[ 'Equality' 'of' T 'by' <: ]" := (Equality.copy T%type (sub_type T%ty
 Notation "[ 'eqMixin' 'of' T 'by' <: ]" := [Equality of T%type by <:]
   (at level 0, format "[ 'eqMixin'  'of'  T  'by'  <: ]") : form_scope.
 
-HB.instance Definition _ := Equality.copy void (pcan_type (of_voidK unit)).
+Set Debug "tactic-unification".
+Set Typeclasses Debug.
+Set Debug "backtrace".
+Set Debug "clenv".
+Set Debug "proofview".
+Set Debug "elpi".
+Elpi Trace.
+Check pcan_type (of_voidK unit) : eqType.
+Check Equality.copy void (pcan_type (of_voidK unit)).
 HB.instance Definition _ (T : eqType) (P : pred T) :=
   [Equality of {x | P x} by <:].
 
