@@ -158,6 +158,8 @@ Declare Scope fin_quant_scope.
 Definition finite_axiom (T : eqType) e :=
   forall x : T, count_mem x e = 1.
 
+Set Debug "unification".
+#[verbose]
 HB.mixin Record isFinite T of Equality T := {
   enum_subdef : seq T;
   enumP_subdef : finite_axiom enum_subdef

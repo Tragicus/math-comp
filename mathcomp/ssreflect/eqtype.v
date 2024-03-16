@@ -144,6 +144,18 @@ Notation "[ 'eqType' 'of' T 'for' C ]" := (Equality.clone T%type C)
 Notation "[ 'eqType' 'of' T ]" := (Equality.clone T%type _)
   (at level 0, format "[ 'eqType'  'of'  T ]") : form_scope.
 
+Axiom finite_axiom : forall (T : eqType) (e : list T), Prop.
+
+
+
+Set Debug "unification".
+#[verbose]
+HB.mixin Record isFinite T of Equality T := {
+  enum_subdef : list T;
+  enumP_subdef : finite_axiom enum_subdef
+}.
+stop.
+
 (* eqE is a generic lemma that can be used to fold back recursive comparisons *)
 (* after using partial evaluation to simplify comparisons on concrete         *)
 (* instances. The eqE lemma can be used e.g. like so: rewrite !eqE /= -!eqE.  *)
