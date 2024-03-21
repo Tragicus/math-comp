@@ -1,7 +1,7 @@
 (* (c) Copyright 2006-2016 Microsoft Corporation and Inria.                  *)
 (* Distributed under the terms of CeCILL-B.                                  *)
 From HB Require Import structures.
-Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool.
 
 (******************************************************************************)
 (*                      Types with a decidable equality                       *)
@@ -406,9 +406,9 @@ Arguments predD1P {T x y b}.
 Prenex Implicits pred1 pred2 pred3 pred4 predU1 predC1 predD1.
 
 Notation "[ 'predU1' x & A ]" := (predU1 x [in A])
-  (at level 0, format "[ 'predU1'  x  &  A ]") : fun_scope.
+  (at level 0, format "[ 'predU1'  x  &  A ]") : function_scope.
 Notation "[ 'predD1' A & x ]" := (predD1 [in A] x)
-  (at level 0, format "[ 'predD1'  A  &  x ]") : fun_scope.
+  (at level 0, format "[ 'predD1'  A  &  x ]") : function_scope.
 
 (* Lemmas for reflected equality and functions.   *)
 
@@ -502,21 +502,21 @@ Arguments app_fdelta {aT rT%type} df%FUN_DELTA f z.
 Notation "[ 'fun' z : T => F 'with' d1 , .. , dn ]" :=
   (SimplFunDelta (fun z : T =>
      app_fdelta d1%FUN_DELTA .. (app_fdelta dn%FUN_DELTA  (fun _ => F)) ..))
-  (at level 0, z name, only parsing) : fun_scope.
+  (at level 0, z name, only parsing) : function_scope.
 
 Notation "[ 'fun' z => F 'with' d1 , .. , dn ]" :=
   (SimplFunDelta (fun z =>
      app_fdelta d1%FUN_DELTA .. (app_fdelta dn%FUN_DELTA (fun _ => F)) ..))
   (at level 0, z name, format
    "'[hv' [ '[' 'fun'  z  => '/ '  F ']' '/'  'with'  '[' d1 , '/'  .. , '/'  dn ']' ] ']'"
-   ) : fun_scope.
+   ) : function_scope.
 
 Notation "[ 'eta' f 'with' d1 , .. , dn ]" :=
   (SimplFunDelta (fun _ =>
      app_fdelta d1%FUN_DELTA .. (app_fdelta dn%FUN_DELTA f) ..))
   (at level 0, format
   "'[hv' [ '[' 'eta' '/ '  f ']' '/'  'with'  '[' d1 , '/'  .. , '/'  dn ']' ] ']'"
-  ) : fun_scope.
+  ) : function_scope.
 
 (* Various EqType constructions.                                         *)
 
@@ -753,7 +753,6 @@ Definition can_type g of cancel f g : Type := T.
 
 End TransferType.
 
-(* TODO: revert to this version when HB.instance supports sections correctly
 Section TransferEqType.
 
 Variables (T : Type) (eT : eqType) (f : T -> eT).
@@ -776,25 +775,7 @@ Definition deprecated_PcanEqMixin g (fK : pcancel f g) :=
 Definition deprecated_CanEqMixin g (fK : cancel f g) :=
   deprecated_InjEqMixin (can_inj fK).
 
-End TransferEqType.*)
-
-Section TransferEqType.
-
-Lemma inj_eqAxiom T (eT : eqType) (f : T -> eT) : injective f -> Equality.axiom (fun x y => f x == f y).
-Proof. by move=> f_inj x y; apply: (iffP eqP) => [|-> //]; apply: f_inj. Qed.
-
-HB.instance Definition _ T (eT : eqType) (f : T -> eT) (f_inj : injective f) := hasDecEq.Build (inj_type f_inj)
-  (inj_eqAxiom f_inj).
-
-HB.instance Definition _ T (eT : eqType) (f : T -> eT) g (fK : pcancel f g) := Equality.copy (pcan_type fK) (inj_type (pcan_inj fK)).
-
-HB.instance Definition _ T (eT : eqType) (f : T -> eT) g (fK : cancel f g) := Equality.copy (can_type fK) (inj_type (can_inj fK)).
-
-Definition deprecated_InjEqMixin T (eT : eqType) (f : T -> eT) (f_inj : injective f) := hasDecEq.Build T (inj_eqAxiom f_inj).
-Definition deprecated_PcanEqMixin T (eT : eqType) (f : T -> eT) g (fK : pcancel f g) :=
-  deprecated_InjEqMixin (pcan_inj fK).
-Definition deprecated_CanEqMixin T (eT : eqType) (f : T -> eT) g (fK : cancel f g) :=
-  deprecated_InjEqMixin (can_inj fK).
+End TransferEqType.
 
 #[deprecated(since="mathcomp 2.0.0",
   note="Use Equality.copy T (inj_type f_inj) instead")]
@@ -806,14 +787,11 @@ Notation PcanEqMixin := deprecated_PcanEqMixin.
   note="Use Equality.copy T (can_type fK) instead")]
 Notation CanEqMixin := deprecated_CanEqMixin.
 
-End TransferEqType.
-
-Definition sub_type_of T (P : pred T) (sT : subType P) of phant sT : Type := sT.
-Notation sub_type T := (sub_type_of (Phant T)).
+Definition sub_type T (P : pred T) (sT : subType P) : Type := sT.
 HB.instance Definition _ T (P : pred T) (sT : subType P) :=
-  SubType.copy (sub_type sT) sT.
+  SubType.on (sub_type sT).
 
-(* Section SubEqType.
+Section SubEqType.
 
 Variables (T : eqType) (P : pred T) (sT : subType P).
 
@@ -822,68 +800,48 @@ Lemma val_eqP : ev_ax sT val. Proof. exact: inj_eqAxiom val_inj. Qed.
 
 #[hnf] HB.instance Definition _ := Equality.copy (sub_type sT) (pcan_type valK).
 
-End SubEqType.*)
-
-Section SubEqType.
-
-Local Notation ev_ax := (fun T v => @Equality.axiom T (fun x y => v x == v y)).
-Lemma val_eqP (T : eqType) (P : pred T) (sT : subType P) : ev_ax sT val. Proof. exact: inj_eqAxiom val_inj. Qed.
-
-#[hnf]
-HB.instance Definition _ (T : eqType) (P : pred T) (sT : subType P) :=
-  (Equality.phant_on_ (Phant (pcan_type valK)) : Equality.axioms_ (pcan_type valK)) : Equality.axioms_ (sub_type sT).
-
 End SubEqType.
 
-(* TODO: see log#29/01/2024
-Timeout 1 Lemma val_eqE (T : eqType) (P : pred T) (sT : subEqType P)
-   (u v : sT) : (val u == val v :> T) = (u == v :> sT).
-   Proof. exact/val_eqP/eqP. Qed.
-
-Lemma val_eqE (T : eqType) (P : pred T) (sT : subType P)
-   (u v : sT) : @eq_op T (val u) (val v) = @eq_op (@Equality.generic_type (sub_type sT) _) u v.
-Proof. exact/val_eqP/eqP. Qed. *)
+Lemma val_eqE (T : eqType) (P : pred T) (sT : subEqType P)
+   (u v : sT) : (val u == val v) = (u == v).
+Proof. exact/val_eqP/eqP. Qed.
 
 Arguments val_eqP {T P sT x y}.
 
-(* TODO: As before. *)
-Notation "[ 'Equality' 'of' T 'by' <: ]" := ((Equality.phant_on_ (Phant (sub_type T%type)) : Equality.axioms_ (sub_type T%type)) : Equality.axioms_ T%type)
+Notation "[ 'Equality' 'of' T 'by' <: ]" := (Equality.copy T%type (sub_type T%type))
   (at level 0, format "[ 'Equality'  'of'  T  'by'  <: ]") : form_scope.
 #[deprecated(since="mathcomp 2.0.0", note="Use [Equality of _ by <:] instead.")]
 Notation "[ 'eqMixin' 'of' T 'by' <: ]" := [Equality of T%type by <:]
   (at level 0, format "[ 'eqMixin'  'of'  T  'by'  <: ]") : form_scope.
 
-(* TODO: As before. *)
-HB.instance Definition _ := (Equality.phant_on_ (Phant (pcan_type (of_voidK unit))) : Equality.axioms_ (pcan_type (of_voidK unit))) : Equality.axioms_ void.
-Elpi Command foo.
-Elpi Query lp:{{
-  coq.say "anchor".
-}}.
+HB.instance Definition _ := Equality.copy void (pcan_type (of_voidK unit)).
 HB.instance Definition _ (T : eqType) (P : pred T) :=
   [Equality of {x | P x} by <:].
 
 Section ProdEqType.
 
-Definition pair_eq (T1 T2 : eqType) : rel (T1 * T2) := fun u v => (u.1 == v.1) && (u.2 == v.2).
+Variable T1 T2 : eqType.
 
-Lemma pair_eqP (T1 T2 : eqType) : Equality.axiom (@pair_eq T1 T2).
+Definition pair_eq : rel (T1 * T2) := fun u v => (u.1 == v.1) && (u.2 == v.2).
+
+Lemma pair_eqP : Equality.axiom pair_eq.
 Proof.
 move=> [x1 x2] [y1 y2] /=; apply: (iffP andP) => [[]|[<- <-]] //=.
 by do 2!move/eqP->.
 Qed.
 
-HB.instance Definition _ (T1 T2 : eqType) := hasDecEq.Build (T1 * T2)%type (@pair_eqP T1 T2).
+HB.instance Definition _ := hasDecEq.Build (T1 * T2)%type pair_eqP.
 
-Lemma pair_eqE (T1 T2 : eqType) : @pair_eq T1 T2 = eq_op :> rel _. Proof. by []. Qed.
+Lemma pair_eqE : pair_eq = eq_op :> rel _. Proof. by []. Qed.
 
-Lemma xpair_eqE (T1 T2 : eqType) (x1 y1 : T1) (x2 y2 : T2) :
+Lemma xpair_eqE (x1 y1 : T1) (x2 y2 : T2) :
   ((x1, x2) == (y1, y2)) = ((x1 == y1) && (x2 == y2)).
 Proof. by []. Qed.
 
-Lemma pair_eq1 (T1 T2 : eqType) (u v : T1 * T2) : u == v -> u.1 == v.1.
+Lemma pair_eq1 (u v : T1 * T2) : u == v -> u.1 == v.1.
 Proof. by case/andP. Qed.
 
-Lemma pair_eq2 (T1 T2 : eqType) (u v : T1 * T2) : u == v -> u.2 == v.2.
+Lemma pair_eq2 (u v : T1 * T2) : u == v -> u.2 == v.2.
 Proof. by case/andP. Qed.
 
 End ProdEqType.
@@ -895,19 +853,21 @@ Definition predX T1 T2 (p1 : pred T1) (p2 : pred T2) :=
   [pred z | p1 z.1 & p2 z.2].
 
 Notation "[ 'predX' A1 & A2 ]" := (predX [in A1] [in A2])
-  (at level 0, format "[ 'predX'  A1  &  A2 ]") : fun_scope.
+  (at level 0, format "[ 'predX'  A1  &  A2 ]") : function_scope.
 
 Section OptionEqType.
 
-Definition opt_eq (T : eqType) (u v : option T) : bool :=
+Variable T : eqType.
+
+Definition opt_eq (u v : option T) : bool :=
   oapp (fun x => oapp (eq_op x) false v) (~~ v) u.
 
-Lemma opt_eqP (T : eqType) : Equality.axiom (@opt_eq T).
+Lemma opt_eqP : Equality.axiom opt_eq.
 Proof.
 case=> [x|] [y|] /=; by [constructor | apply: (iffP eqP) => [|[]] ->].
 Qed.
 
-HB.instance Definition _ (T : eqType) := hasDecEq.Build (option T) (@opt_eqP T).
+HB.instance Definition _ := hasDecEq.Build (option T) opt_eqP.
 
 End OptionEqType.
 
@@ -932,25 +892,26 @@ End TaggedAs.
 
 Section TagEqType.
 
-(* TODO: Why do I need an annotation here? *)
-Definition tag_eq (I : eqType) (T_ : I -> eqType) (u v : {i : I & T_ i}) := (tag u == tag v) && ((tagged u : (T_ (tag u))) == tagged_as u v).
+Variables (I : eqType) (T_ : I -> eqType).
+Implicit Types u v : {i : I & T_ i}.
 
-Lemma tag_eqP (I : eqType) (T_ : I -> eqType) : Equality.axiom (@tag_eq I T_).
+Definition tag_eq u v := (tag u == tag v) && (tagged u == tagged_as u v).
+
+Lemma tag_eqP : Equality.axiom tag_eq.
 Proof.
 rewrite /tag_eq => [] [i x] [j] /=.
 case: eqP => [<-|Hij] y; last by right; case.
 by apply: (iffP eqP) => [->|<-]; rewrite tagged_asE.
 Qed.
 
-HB.instance Definition _ (I : eqType) (T_ : I -> eqType) := hasDecEq.Build {i : I & T_ i} (@tag_eqP I T_).
+HB.instance Definition _ := hasDecEq.Build {i : I & T_ i} tag_eqP.
 
-Lemma tag_eqE (I : eqType) (T_ : I -> eqType) : @tag_eq I T_ = eq_op. Proof. by []. Qed.
+Lemma tag_eqE : tag_eq = eq_op. Proof. by []. Qed.
 
-Lemma eq_tag (I : eqType) (T_ : I -> eqType) (u v : {i : I & T_ i}) : u == v -> tag u = tag v.
+Lemma eq_tag u v : u == v -> tag u = tag v.
 Proof. by move/eqP->. Qed.
 
-(* TODO: Why do I need an annotation here? *)
-Lemma eq_Tagged (I : eqType) (T_ : I -> eqType) (u : {i : I & T_ i}) x : (u == Tagged _ x) = ((tagged u : T_ (tag u)) == x).
+Lemma eq_Tagged u x :(u == Tagged _ x) = (tagged u == x).
 Proof. by rewrite -tag_eqE /tag_eq eqxx tagged_asE. Qed.
 
 End TagEqType.
@@ -960,18 +921,21 @@ Arguments tag_eqP {I T_ x y}.
 
 Section SumEqType.
 
-Definition sum_eq (T1 T2 : eqType) (u v : T1 + T2) :=
+Variables T1 T2 : eqType.
+Implicit Types u v : T1 + T2.
+
+Definition sum_eq u v :=
   match u, v with
   | inl x, inl y | inr x, inr y => x == y
   | _, _ => false
   end.
 
-Lemma sum_eqP (T1 T2 : eqType) : Equality.axiom (@sum_eq T1 T2).
+Lemma sum_eqP : Equality.axiom sum_eq.
 Proof. case=> x [] y /=; by [right | apply: (iffP eqP) => [->|[->]]]. Qed.
 
-HB.instance Definition _ (T1 T2 : eqType) := hasDecEq.Build (T1 + T2)%type (@sum_eqP T1 T2).
+HB.instance Definition _ := hasDecEq.Build (T1 + T2)%type sum_eqP.
 
-Lemma sum_eqE (T1 T2 : eqType) : (@sum_eq T1 T2) = eq_op. Proof. by []. Qed.
+Lemma sum_eqE : sum_eq = eq_op. Proof. by []. Qed.
 
 End SumEqType.
 
