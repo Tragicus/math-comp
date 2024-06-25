@@ -386,10 +386,22 @@ Proof.
 move=> /coprimeP-/(_ isT)[[/=]] a b abP.
 apply/eqP; rewrite eqEsubset subsetT/= -(gen_tperm 0)/= gen_subG.
 apply/subsetP => s /imsetP[/= i _ ->].
+have: (b * k <= a * n.+1) by apply/ltnW; rewrite -subn_gt0 abP.
+move=> /(leq_mul (leqnn i)).
 move: abP => /(congr1 (fun x => i * x)%N).
 rewrite muln1 mulnBr !mulnA.
-move: (i * a)%N => {}a.
-case: (i * b)
+move: (i * a)%N (i * b)%N => {}a {}b.
+elim: b i => [|b IHb] i.
+  rewrite subn0 => iE _.
+  move: (ltn_ord i); rewrite -iE -[X in _ < X]mul1n ltn_mul2r/= ltnS leqn0.
+  move: iE => /[swap] /eqP -> iE.
+  have ->: i = 0 by  apply/val_inj; rewrite /= -iE.
+  by rewrite tperm1 group1.
+move: IHb => /(_ (i + k))/= + iE ba.
+rewrite -iE addnC addnBA// mulSn subnDl.
+Search (_ + (_ - _))%N.
+addnA.
+S
 Search mem (_ ^ _)%g.
 tpermJ
 memJ_norm
