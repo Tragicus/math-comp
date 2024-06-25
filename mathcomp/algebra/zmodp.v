@@ -380,12 +380,21 @@ Section Sym.
 
 Import GRing.
 
-Lemma gen_tperm_step n (k : 'I_n.+2) : coprime n.+2 k ->
-  <<[set tperm i (i + k) | i : 'I_n.+2]>>%g = [set: 'S_n.+2].
+Lemma gen_tperm_step n (k : 'I_n.+1) : coprime n.+1 k ->
+  <<[set tperm i (i + k) | i : 'I_n.+1]>>%g = [set: 'S_n.+1].
 Proof.
-rewrite -unitZpE// natr_Zp => k_unit.
+move=> /coprimeP-/(_ isT)[[/=]] a b abP.
 apply/eqP; rewrite eqEsubset subsetT/= -(gen_tperm 0)/= gen_subG.
 apply/subsetP => s /imsetP[/= i _ ->].
+move: abP => /(congr1 (fun x => i * x)%N).
+rewrite muln1 mulnBr !mulnA.
+move: (i * a)%N => {}a.
+case: (i * b)
+Search mem (_ ^ _)%g.
+tpermJ
+memJ_norm
+Search {perm _}.
+Check mulVKr.
 rewrite -[i](mulVKr k_unit) -[_ * i]natr_Zp mulr_natr.
 elim: (val _) => //= {i} [|[|i] IHi]; first by rewrite tperm1 group1.
   by rewrite mulrSr mem_gen//; apply/imsetP; exists 0.
