@@ -1017,47 +1017,10 @@ HB.structure Definition TBPOrder d := { T of hasTop d T & BPOrder d T }.
 
 Module POrderExports.
 Arguments le_trans {d s} [_ _ _].
-#[deprecated(since="mathcomp 2.0.0", note="Use POrder.clone instead.")]
-Notation "[ 'porderType' 'of' T 'for' cT ]" := (POrder.clone _ T%type cT)
-  (at level 0, format "[ 'porderType'  'of'  T  'for'  cT ]") : form_scope.
-#[deprecated(since="mathcomp 2.0.0", note="Use POrder.clone instead.")]
-Notation "[ 'porderType' 'of' T 'for' cT 'with' disp ]" :=
-  (POrder.clone disp T%type cT)
-  (at level 0, format "[ 'porderType'  'of'  T  'for'  cT  'with'  disp ]") :
-  form_scope.
-#[deprecated(since="mathcomp 2.0.0", note="Use POrder.clone instead.")]
-Notation "[ 'porderType' 'of' T ]" := (POrder.clone _ T%type _)
-  (at level 0, format "[ 'porderType'  'of'  T ]") : form_scope.
-#[deprecated(since="mathcomp 2.0.0", note="Use POrder.clone instead.")]
-Notation "[ 'porderType' 'of' T 'with' disp ]" := (POrder.clone disp T%type _)
-  (at level 0, format "[ 'porderType'  'of'  T  'with' disp ]") : form_scope.
 End POrderExports.
 HB.export POrderExports.
 
 (* Bind Scope order_scope with POrder.sort. *)
-
-
-(* HB.mixin Record POrder_isJoinSemiLattice *)
-(*     d (T : indexed Type) of POrder d T := { *)
-(*   join : T -> T -> T; *)
-(*   joinC : commutative join; *)
-(*   joinA : associative join; *)
-(*   le_defU : forall x y, (x <= y) = (join x y == y); *)
-(* }. *)
-(* #[short(type="joinSemiLatticeType")] *)
-(* HB.structure Definition JoinSemiLattice d := *)
-(*   { T of POrder_isJoinSemiLattice d T & POrder d T }. *)
-
-(* HB.mixin Record POrder_isMeetSemiLattice *)
-(*     d (T : indexed Type) of POrder d T := { *)
-(*   meet : T -> T -> T; *)
-(*   meetC : commutative meet; *)
-(*   meetA : associative meet; *)
-(*   le_def : forall x y, (x <= y) = (meet x y == x); *)
-(* }. *)
-(* #[short(type="meetSemiLatticeType")] *)
-(* HB.structure Definition MeetSemiLattice d := *)
-(*   { T of POrder_isMeetSemiLattice d T & POrder d T }. *)
 
 #[key="T", primitive]
 HB.mixin Record POrder_isMeetSemilattice d (T : Type) of POrder d T := {
@@ -5271,8 +5234,10 @@ Qed.
 Fact dvdn_anti : antisymmetric dvdn.
 Proof. by move=> a b => /andP[] /gcdn_idPl + /gcdn_idPr => ->. Qed.
 
+#[export]
 HB.instance Definition _ := Preorder_isPOrder.Build dvd_display t dvdn_anti.
 
+#[export]
 HB.instance Definition _ := @POrder_Meet_isDistrLattice.Build dvd_display t
   gcdn lcmn gcdnC lcmnC gcdnA lcmnA joinKI meetKU le_def meetUl.
 
