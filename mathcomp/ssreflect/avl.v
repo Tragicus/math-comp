@@ -1,11 +1,14 @@
 From HB Require Import structures.
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_ssreflect interval.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Import Order.PreorderTheory Order.POrderTheory Order.TotalTheory.
+Local Open Scope order_scope.
+Local Open Scope nat_scope.
+
+Import Order.PreorderTheory Order.POrderTheory Order.TotalTheory Order.LatticeTheoryMeet Order.LatticeTheoryJoin.
 
 Ltac mp :=
   match goal with
@@ -144,6 +147,35 @@ case: (leq_diffnP 2 m n); rewrite ?addn2.
 - exact: LeqDiffn2.
 Qed.
 
+Lemma behead_catl (T : eqType) (l r : seq T) : (behead (l ++ r) == behead l ++ r) = ((l != [::]) || (r == [::])).
+Proof.
+case: l => /= [|_ l]; last exact/eqxx.
+case: r => //= x r.
+transitivity false; last by apply/esym/negP => /eqP.
+by apply/negP => /eqP => /(congr1 size)/= /n_Sn.
+Qed.
+
+(* Wrong if l is non-empty and constant and r starts with the element in l.
+Lemma behead_catr (T : eqType) (l r : seq T) : (behead (l ++ r) == l ++ behead r) = (l == [::]).
+Proof.
+case: l => /= [|x l]; first exact/eqxx.
+case: r => //=.  y r.
+transitivity false; last by apply/esym/negP => /eqP.
+by apply/negP => /eqP => /(congr1 size)/= /n_Sn.
+Qed.*)
+
+Lemma itvI (d' : unit) (T : orderType d') (a b c d : itv_bound T) :
+  Interval a b `&` Interval c d = Interval (a `|` c) (b `&` d).
+Proof. by []. Qed.
+
+Lemma subitvE (disp : unit) (T : porderType disp) (itv itv' : interval T) :
+  ((itv <= itv') = (itv'.1 <= itv.1) && (itv.2 <= itv'.2))%O.
+Proof. by case: itv; case: itv'. Qed.
+
+Lemma itv_boundlr (disp : unit) (T : porderType disp) (itv : interval T) (x : T) :
+  x \in itv = (itv.1 <= BLeft x)%O && (BRight x <= itv.2)%O.
+Proof. by case: itv. Qed.
+
 Section Leo.
 Variables (d : unit) (T : orderType d).
 Implicit Types (n m : option T) (p q : T).
@@ -214,6 +246,7 @@ case=> sul -> sur ->; rewrite 2!eqxx/=; apply/andP; split; first exact/IHsl.
 exact/IHsr.
 Qed.
 
+#[export]
 HB.instance Definition _ := hasDecEq.Build t eqbP.
 
 Definition height s :=
@@ -234,13 +267,13 @@ Fixpoint balanced s :=
   | node l _ r h => (diffn (height l) (height r) <= 2) && (balanced l) && (balanced r)
   end.
 
-Fixpoint well_ordered s lb ub := 
+Fixpoint well_ordered s (itv : interval elt) := 
   match s with
   | leaf => true
-  | node l x r _ => (lto lb (Some x)) && (lto (Some x) ub)%O && (well_ordered l lb (Some x)) && (well_ordered r (Some x) ub)
+  | node l x r _ => (x \in itv) && (well_ordered l (Interval itv.1 (BLeft x))) && (well_ordered r (Interval (BRight x) itv.2))
   end.
 
-Definition is_avl s := (well_formed s) && (balanced s) && (well_ordered s None None).
+Definition is_avl s := (well_formed s) && (balanced s) && (well_ordered s `]-oo, +oo[).
 
 Definition create l x r := (node l x r (maxn (height l) (height r)).+1).
 Arguments create : simpl never.
@@ -344,15 +377,7 @@ Fixpoint split x s :=
     else let (rlmem, rr) := split x r in let (rl, mem) := rlmem in (join l sx rl, mem, rr)
   end.
 
-Definition empty := leaf.
-
 Definition is_empty s := match s with | leaf => true | _ => false end.
-
-Fixpoint mem x s :=
-  match s with
-  | leaf => false
-  | node l sx r _ => (x == sx) || (mem x (if (x < sx)%O then l else r))
-  end.
 
 Fixpoint remove x s :=
   match s with
@@ -441,6 +466,12 @@ Fixpoint fold rT (f : elt -> rT -> rT) s accu :=
   | node l x r _ => fold f r (f x (fold f l accu))
   end.
 
+Fixpoint mem s x :=
+  match s with
+  | leaf => false
+  | node l sx r _ => (x == sx) || (mem (if (x < sx)%O then l else r) x)
+  end.
+
 Fixpoint all (p : pred elt) s :=
   match s with
   | leaf => true
@@ -476,11 +507,13 @@ Fixpoint card s :=
   | node l _ r _ => (card l + card r).+1
   end.
 
-Fixpoint elements s := (fix F accu s :=
+Fixpoint elements_subdef accu s :=
   match s with
   | leaf => accu
-  | node l x r _ => F (x :: F accu r) l
-  end) [::] s.
+  | node l x r _ => elements_subdef (x :: elements_subdef accu r) l
+  end.
+
+Definition elements := elements_subdef [::].
 
 Definition choose s :=
   match s with
@@ -528,59 +561,140 @@ End Def2.
 
 Section Theory.
 Variables (d d' : unit) (elt : orderType d) (elt' : orderType d').
-Implicit Types (s l r : t elt) (x : elt) (lb ub : option elt).
+Implicit Types (s l r : t elt) (x : elt) (itv : interval elt).
+
+Lemma elements_subdefE a s : elements_subdef a s = elements s ++ a.
+Proof.
+rewrite /elements -{1}/([::] ++ a).
+elim: s [::] => [//|l IHl x r IHr h] s/=.
+by rewrite IHr -cat_cons IHl.
+Qed.
+
+Lemma elements_node l x r h :
+  elements (node l x r h) = elements l ++ x :: elements r.
+Proof.
+rewrite /elements.
+elim: l x => [//|ll IHl lx lr IHr n] x/=.
+by rewrite !elements_subdefE !cats0 -catA cat_cons.
+Qed.
+
+Lemma cardE s: card s = size (elements s).
+Proof.
+elim: s => [//|/= l -> x r -> h]/=.
+by rewrite elements_node size_cat/= addnS.
+Qed.
 
 Lemma height0 s : well_formed s -> height s == 0 = (s == leaf elt).
 Proof. by case: s => [//|l x r h] /= /andP[]/andP[] /eqP ->. Qed.
 
-Lemma well_orderedWl s lb lb' ub : map_or (fun lb' : elt => map_or (>= lb')%O false lb) true lb'-> well_ordered s lb ub -> well_ordered s lb' ub.
+Lemma well_orderedW s itv itv0 : (itv <= itv0)%O -> well_ordered s itv -> well_ordered s itv0.
 Proof.
-elim: s lb lb' ub => [//|] l IHl x r IHr/= _ lb lb' ub lb'lb
-    /andP[]/andP[]/andP[] lbx xub lwo rwo.
-rewrite xub rwo (IHl _ _ _ lb'lb)// !andbT.
-by case: lb' lb'lb lbx => [|//]lb'; case: lb {lwo} => [|//]lb /=; apply: le_lt_trans.
+elim: s itv itv0 => [//|] l IHl x r IHr/= _ itv itv0 itvle.
+move=> /andP[]/andP[] /(subitvP itvle) ->.
+move=> /IHl ->; last by move: itvle; rewrite !subitvE/= lexx => /andP[->].
+by move=> /IHr -> //; move: itvle; rewrite !subitvE/= lexx => /andP[_].
 Qed.
 
-Lemma well_orderedWr s lb ub ub' : map_or (fun ub' : elt => map_or (<= ub')%O false ub) true ub' -> well_ordered s lb ub -> well_ordered s lb ub'.
+Lemma well_orderedWT s itv : well_ordered s itv -> well_ordered s `]-oo, +oo[.
+Proof. exact/well_orderedW/Order.lex1. Qed.
+
+Lemma well_orderedWl s itv lb : (itv.1 <= lb)%O -> well_ordered s (Interval lb itv.2) -> well_ordered s itv.
+Proof. by move=> lbi; apply/well_orderedW; rewrite subitvE lbi/=. Qed.
+
+Lemma well_orderedWr s itv ub : (ub <= itv.2)%O -> well_ordered s (Interval itv.1 ub) -> well_ordered s itv.
+Proof. by move=> iub; apply/well_orderedW; rewrite subitvE/= lexx iub. Qed.
+
+Lemma well_orderedWTl s itv : well_ordered s itv -> well_ordered s (Interval -oo itv.2).
+Proof. by apply/well_orderedW; rewrite subitvE/=. Qed.
+
+Lemma well_orderedWTr s itv : well_ordered s itv -> well_ordered s (Interval itv.1 +oo).
+Proof. by apply/well_orderedW; rewrite subitvE/= lexx Order.lex1. Qed.
+
+Lemma all_andb p q s : all (predI p q) s = all p s && all q s.
 Proof.
-elim: s lb ub ub' => [//|] l IHl x r IHr/= _ lb ub ub' ubub'
-    /andP[]/andP[]/andP[] lbx xub lwo rwo.
-rewrite lbx lwo (IHr _ _ _ ubub')// !andbT.
-by case: ub' ubub' xub => [|//]ub'; case: ub {rwo} => [|//]ub /= /[swap]; apply: lt_le_trans.
+elim: s => [//|] l IHl x r IHr h/=.
+rewrite -!andbA; congr andb.
+rewrite andbCA IHl -andbA; congr andb.
+rewrite andbCA [in RHS]andbCA; congr andb.
+by rewrite andbCA; congr andb.
 Qed.
 
-Lemma well_orderedW s lb ub : well_ordered s lb ub -> well_ordered s None None.
-Proof. move=> swo; exact/(well_orderedWl _ (well_orderedWr _ swo)). Qed.
+Lemma eq_all p q s : p =1 q -> all p s = all q s.
+Proof. by move=> pq; elim: s => [//|] /= l -> x r -> h; rewrite pq. Qed.
 
-Lemma mem_well_ordered x s lb ub : well_ordered s lb ub -> mem x s -> (lto lb (Some x) && lto (Some x) ub).
+Lemma well_orderedP s itv : well_ordered s itv = (well_ordered s `]-oo, +oo[ && all (fun x => x \in itv) s).
 Proof.
-elim: s lb ub => [//|l IHl sx r IHr /= _] lb ub /andP[]/andP[]/andP[] lbsx sxub /IHl {}IHl /IHr {}IHr.
-case /comparable_ltgtP: (comparableT x sx) => /= [xsx|sxx|-> _]; last by apply/andP; split.
-  by move=> /IHl /andP[] -> {}xsx; exact: (lto_trans xsx sxub).
-by move=> /IHr /andP[] {}sxx /= ->; rewrite (lto_trans lbsx sxx).
+elim: s itv => [//|] l IHl x r IHr h/= itv.
+case/boolP: (x \in itv) => /=; last by rewrite andbF.
+rewrite itv_boundlr => /andP[] ix xi.
+rewrite IHl [in RHS]IHl.
+case: (well_ordered _ _) => //=.
+rewrite IHr [in RHS]IHr.
+case: (well_ordered _ _) => /=; last by rewrite !andbF.
+rewrite andbACA -!all_andb; congr andb; apply/eq_all => y /=; rewrite !itv_boundlr/=.
+  rewrite andbCA; congr andb.
+  case/boolP: (_ <= _)%O => //= yx.
+  by apply/esym/(le_trans yx)/(le_trans _ xi); rewrite bnd_simp.
+rewrite !andbA; congr andb.
+case/boolP: (_ <= _)%O => //= xy.
+by apply/esym/(le_trans ix)/(le_trans _ xy); rewrite bnd_simp.
+Qed.
+  
+Lemma mem_well_ordered x s itv: well_ordered s itv -> mem s x -> (x \in itv).
+Proof.
+elim: s itv => [//|l IHl sx r IHr /= _] itv /andP[]/andP[] /[dup] sxP.
+rewrite itv_boundlr => /andP[] isx sxi lwo rwo.
+case /comparable_ltgtP: (comparableT x sx) => /= [xsx|sxx|-> //].
+  by apply/IHl/(well_orderedW _ lwo); rewrite subitvE/= lexx (le_trans _ sxi)//= bnd_simp.
+by apply/IHr/(well_orderedW _ rwo); rewrite subitvE/= lexx (le_trans isx)//= bnd_simp.
 Qed.
 
-Lemma mem_node y l x r h : well_ordered (node l x r h) None None -> mem y (node l x r h) = (y == x) || (mem y l) || (mem y r).
+Lemma mem_node y l x r h : well_ordered (node l x r h) `]-oo, +oo[ -> mem (node l x r h) y = (y == x) || (mem l y) || (mem r y).
 Proof.
 rewrite /mem /=; case /comparable_ltgtP: (comparableT x y) => [xy|yx|//]/= /andP[] lwo rwo.
   by rewrite orbC -[LHS]orbF; congr orb; apply/esym/negP => /(mem_well_ordered lwo) /andP[_]/= /(lt_trans xy); rewrite ltxx.
 by rewrite -[LHS]orbF; congr orb; apply/esym/negP => /(mem_well_ordered rwo) /andP[] /(lt_trans yx) + _; rewrite ltxx.
 Qed.
 
-Lemma well_ordered_lbP x s lb : well_ordered s lb None -> mem x s -> lto lb (Some x).
+Lemma mem_elements s x : well_ordered s `]-oo, +oo[ -> mem s x = (x \in (elements s)).
 Proof.
-elim: s lb => [//|l IHl sx r IHr h] lb swo.
-rewrite mem_node; last exact/(well_orderedW swo).
-move: swo => /= /andP[]/andP[]/andP[] lbx _ /(well_orderedWr (ub':=None) erefl) {}/IHl IHl {}/IHr IHr /orP; case => [/orP|/IHr]; [case=> [/eqP ->|]//|].
-exact/(lto_trans lbx).
+elim: s => [//|l IHl y r IHr h]/= /andP[] lwo rwo.
+rewrite elements_node mem_cat in_cons orbCA.
+case: (comparable_ltgtP (comparableT x y)) => //= xy.
+  rewrite (IHl (well_orderedWT lwo)) orbC.
+  case/boolP: (x \in elements r) => //.
+  rewrite -(IHr (well_orderedWT rwo)) => /(mem_well_ordered rwo).
+  by rewrite in_itv/= andbT => /(lt_trans xy); rewrite ltxx.
+rewrite (IHr (well_orderedWT rwo)).
+case/boolP: (x \in elements l) => //.
+rewrite -(IHl (well_orderedWT lwo)) => /(mem_well_ordered lwo)/=.
+by rewrite in_itv/= => /(lt_trans xy); rewrite ltxx.
 Qed.
 
-Lemma well_ordered_ubP x s ub : well_ordered s None ub -> mem x s -> lto (Some x) ub.
+Lemma sorted_elements s : well_ordered s `]-oo, +oo[ -> sorted <%O (elements s).
 Proof.
-elim: s ub => [//|l IHl sx r IHr h] ub swo.
-rewrite mem_node; last exact/(well_orderedW swo).
-move: swo => /= /andP[]/andP[] sxub {}/IHl IHl /(well_orderedWl (lb':=None) erefl) {}/IHr IHr /orP; case => [/orP|/IHr//]; case=> [/eqP ->//|/IHl xsx].
-exact/(lto_trans xsx sxub).
+elim: s => //= l IHl x r IHr h /andP[] lwo rwo.
+rewrite elements_node; apply/(sortedP x) => i.
+rewrite size_cat/= addnS -addSn => ilt.
+rewrite !nth_cat.
+case: (ltnP i.+1 (size (elements l))) => [iltl|].
+  by rewrite (ltnW iltl); move: lwo => /well_orderedWT /IHl /(sortedP x) ->.
+rewrite leq_eqVlt => /orP[/eqP iE|].
+  rewrite iE leqnn subnn/=.
+  suff: mem l (nth x (elements l) i).
+    by move=> /(mem_well_ordered lwo); rewrite in_itv.
+  rewrite mem_elements; last exact/(well_orderedWT lwo).
+  by apply/mem_nth; rewrite iE.
+rewrite ltnS ltnNge => /[dup] + -> /=; rewrite leq_eqVlt => /orP[/eqP iE|igt].
+  rewrite iE subSn// subnn/=.
+  suff: mem r (nth x (elements r) 0).
+    by move=> /(mem_well_ordered rwo); rewrite in_itv andbT.
+  rewrite mem_elements; last exact/(well_orderedWT rwo).
+  apply/mem_nth; move: ilt; rewrite iE.
+  by case: (size _) => //; rewrite addn0 ltnn.
+rewrite subSn ?(ltnW igt)//= -subSS subSn//=.
+move: rwo => /well_orderedWT /IHr /(sortedP x) -> //.
+by rewrite -subSn// ltn_subLR// ltnS (ltnW igt).
 Qed.
 
 Lemma well_formed_create l x r : well_formed l -> well_formed r -> well_formed (create l x r).
@@ -589,11 +703,14 @@ Proof. by rewrite /= eqxx => -> ->. Qed.
 Lemma balanced_create l x r : balanced l -> balanced r -> diffn (height l) (height r) <= 2 -> balanced (create l x r).
 Proof. by move=> /= -> -> ->. Qed.
 
-Lemma well_ordered_create l x r lb ub : well_ordered l lb (Some x) -> well_ordered r (Some x) ub -> lto lb (Some x) -> lto (Some x) ub -> well_ordered (create l x r) lb ub.
-Proof. by move=> /= -> -> -> ->. Qed.
+Lemma well_ordered_create l x r itv : x \in itv -> well_ordered l (Interval itv.1 (BLeft x)) -> well_ordered r (Interval (BRight x) itv.2) -> well_ordered (create l x r) itv.
+Proof. by move=> /= -> ->. Qed.
 
-Lemma mem_create y l x r : well_ordered (create l x r) None None -> mem y (create l x r) = (y == x) || (mem y l) || (mem y r).
+Lemma mem_create y l x r : well_ordered (create l x r) `]-oo, +oo[ -> mem (create l x r) y = (y == x) || (mem l y) || (mem r y).
 Proof. exact: mem_node. Qed.
+
+Lemma elements_create l x r : elements (create l x r) = elements l ++ x :: elements r.
+Proof. exact: elements_node. Qed.
 
 Lemma card_create l x r : card (create l x r) = (card l + card r).+1.
 Proof. by []. Qed.
@@ -689,74 +806,49 @@ case_bal l r => /=.
 - by move=> _ _ ->; rewrite lrd.
 Qed.
 
-Lemma well_ordered_bal l x r lb ub : well_ordered (bal l x r) lb ub = lto lb (Some x) && lto (Some x) ub && well_ordered l lb (Some x) && well_ordered r (Some x) ub.
+Lemma well_ordered_bal l x r itv : well_ordered (bal l x r) itv = ((x \in itv) && well_ordered l (Interval itv.1 (BLeft x)) && well_ordered r (Interval (BRight x) itv.2)).
 Proof.
-case_bal l r => //= _ _; apply/idP/idP => /andP[]/andP[]/andP[].
-- move=> _ rlxub /andP[]/andP[]/andP[] -> xrlx -> -> /andP[]/andP[]/andP[] rlxrx rxub -> ->.
-  rewrite rxub xrlx rlxrx (lt_trans xrlx rlxrx).
-  by move: (lto_trans (n:=Some x) (lt_trans xrlx rlxrx) rxub) => /= ->.
-- move=> lbx _ -> /andP[]/andP[]/andP[] xrx rxub /andP[]/andP[]/andP[] xrlx rlxrx -> -> ->.
-  rewrite lbx xrlx rlxrx rxub (lto_trans (m:=Some rlx) lbx xrlx).
-  by move: (lto_trans (n:=Some rlx) rlxrx rxub) => /= ->.
-- move=> _ rxub /andP[]/andP[]/andP[] -> xrx -> -> ->.
-  by move: (lto_trans (n:=Some x) xrx rxub) => /= ->; rewrite xrx rxub.
-- move=> lbx _ -> /andP[]/andP[]/andP[] xrx -> -> ->.
-  by rewrite xrx lbx (lto_trans (m:=Some rx) lbx xrx). 
-- move=> lblrx _ /andP[]/andP[]/andP[] -> lxlrx -> -> /andP[]/andP[]/andP[] lrxx -> -> ->.
-  by rewrite (lto_trans (m:=Some x) lblrx lrxx) (lt_trans lxlrx lrxx) lxlrx lrxx.
-- move=> _ xub /andP[]/andP[]/andP[] lblx lxx -> /andP[]/andP[]/andP[] lxlrx lrxx -> -> ->.
-  rewrite (lto_trans (m:=Some lrx) lblx lxlrx) lblx lxlrx lrxx xub.
-  by move: (lto_trans (n:=Some lrx) lrxx xub) => /= ->.
-- move=> lblx _ -> /andP[]/andP[]/andP[] lxx -> -> ->.
-  by rewrite (lto_trans (m:=Some x) lblx lxx) lblx lxx.
-- move=> _ xub /andP[]/andP[]/andP[] -> lxx -> -> ->.
-  by rewrite xub lxx; move: (lto_trans (n:=Some lx) lxx xub) => /= ->.
+case_bal l r => //= _ _; apply/idP/idP => /andP[]/andP[];
+    rewrite !itv_boundlr/= !bnd_simp.
+- move=> /andP[] irlx rlxi /andP[]/andP[]/andP[] ix xrlx -> -> /andP[]/andP[]/andP[] rlxrx rxi -> ->.
+  rewrite ix (lt_trans xrlx rlxrx) rxi xrlx rlxrx/= (le_trans _ rxi)// bnd_simp.
+  exact/ltW/(lt_trans xrlx).
+- move=> /andP[] ix xi -> /andP[]/andP[]/andP[] xrx rxi /andP[]/andP[]/andP[] xrlx rlxrx -> -> ->.
+  rewrite ix xrlx rlxrx rxi/= !andbT; apply/andP; split.
+    by apply/(le_trans ix); rewrite bnd_simp; apply/ltW.
+  by apply/(le_trans _ rxi); rewrite bnd_simp; apply/ltW.
+- move=> /andP[] irx rxi /andP[]/andP[]/andP[] ix xrx -> -> ->.
+  by rewrite ix xrx rxi/= (le_trans _ rxi)// bnd_simp ltW.
+- move=> /andP[] ix xi -> /andP[]/andP[]/andP[] xrx rxi -> ->.
+  by rewrite ix rxi xrx/= (le_trans ix)// bnd_simp ltW.
+- move=> /andP[] ilrx lrxi /andP[]/andP[]/andP[] ilx lxlrx -> -> /andP[]/andP[]/andP[] lrxx xi -> ->.
+  rewrite xi ilx (lt_trans lxlrx lrxx) lxlrx lrxx/= (le_trans ilx)// bnd_simp.
+  exact/ltW/(lt_trans lxlrx).
+- move=> /andP[] ix xi /andP[]/andP[]/andP[] ilx lxx -> /andP[]/andP[]/andP[] lxlrx lrxx -> -> ->.
+  rewrite ilx lxlrx lrxx xi/= !andbT; apply/andP; split.
+    by apply/(le_trans ilx); rewrite bnd_simp; apply/ltW.
+  by apply/(le_trans _ xi); rewrite bnd_simp; apply/ltW.
+- move=> /andP[] ilx lxi -> /andP[]/andP[]/andP[] lxx xi -> ->.
+  by rewrite xi ilx lxx/= (le_trans ilx)// bnd_simp ltW.
+- move=> /andP[] ix xi /andP[]/andP[]/andP[] ilx lxx -> -> ->.
+  by rewrite ilx lxx xi/= (le_trans _ xi)// bnd_simp ltW.
 Qed.
 
-Lemma mem_bal y l x r : well_ordered (bal l x r) None None -> mem y (bal l x r) = (y == x) || (mem y l) || (mem y r).
+Lemma elements_bal l x r : elements (bal l x r) = elements l ++ x :: elements r.
 Proof.
-case_bal l r; last exact: mem_create.
-- move=> _ _ /andP[]/andP[]/andP[] _ _ /andP[]/andP[]/andP[] _ xrlx
-    lwo rllwo /andP[]/andP[]/andP[] rlxrx _ rlrwo rrwo.
-  rewrite !mem_create; [rewrite !mem_node| | |] => /=.
-  + rewrite !orbA; congr (_ || _ || _).
-    rewrite [(y == rlx) || _]orbC -!orbA; congr orb.
-    rewrite [mem y rll || _]orbC !orbA; congr orb.
-    rewrite [_ || mem y l]orbC -!orbA; congr orb.
-    exact: orbC.
-  + by rewrite (well_orderedWl (lb':=None) erefl rllwo) (well_orderedWr (ub':=None) erefl rlrwo).
-    (* TODO: AAAAAArgh, completely and utterly broken unification! *)
-  + by rewrite (well_orderedWl (lb':=None) erefl rllwo) /well_ordered rlrwo rrwo !andbT.
-  + by rewrite (well_orderedWl (lb':=None) erefl rlrwo) /well_ordered rrwo.
-  + by rewrite (well_orderedWr (ub':=None) erefl rllwo) /well_ordered lwo.
-  + by rewrite /well_ordered lwo rllwo rlrwo rrwo; move: xrlx rlxrx => /= -> ->.
-- move=> _ _ /andP[]/andP[]/andP[] _ _ /andP[]/andP[]/andP[] _ xrx lwo rlwo rrwo.
-  rewrite !mem_create; [rewrite !mem_node| |] => /=.
-  + rewrite !orbA; congr (_ || _ || _).
-    rewrite [(y == rx) || _]orbC -!orbA; congr orb.
-    exact: orbC.
-  + by rewrite (well_orderedWl (lb':=None) erefl rlwo).
-  + by rewrite (well_orderedWr (ub':=None) erefl rlwo) /well_ordered lwo.
-  + by rewrite /well_ordered lwo rlwo rrwo !andbT.
-- move=> _ _ /andP[]/andP[]/andP[] _ _ /andP[]/andP[]/andP[] _ lxlrx llwo lrlwo /andP[]/andP[]/andP[] lrxx _ lrrwo rwo.
-  rewrite !mem_create; [rewrite !mem_node| | |] => /=.
-  + rewrite !orbA; congr (_ || _ || _).
-    rewrite orbC -!orbA; congr orb.
-    rewrite !orbA; congr orb.
-    rewrite [(y == lrx) || _]orbC -!orbA; congr orb.
-    exact: orbC.
-  + by rewrite (well_orderedWl (lb':=None) erefl lrlwo) (well_orderedWr (ub':=None) erefl lrrwo).
-    (* TODO: AAAAAArgh, completely and utterly broken unification! *)
-  + by rewrite (well_orderedWl (lb':=None) erefl llwo) (well_orderedWr (ub':=None) erefl lrrwo) /well_ordered lrlwo !andbT.
-  + by rewrite (well_orderedWl (lb':=None) erefl lrrwo) /well_ordered rwo.
-  + by rewrite (well_orderedWr (ub':=None) erefl lrlwo) /well_ordered llwo.
-  + by rewrite /well_ordered llwo lrlwo lrrwo rwo; move: lxlrx lrxx => /= -> ->.
-- move=> _ _ /andP[]/andP[]/andP[] _ _ llwo /andP[]/andP[]/andP[] lxx _ lrwo rwo.
-  rewrite !mem_create; [rewrite !mem_node| |] => /=.
-  + by rewrite !orbA; congr (_ || _ || _); rewrite orbC -!orbA.
-  + by rewrite (well_orderedWl (lb':=None) erefl llwo) (well_orderedWr (ub':=None) erefl lrwo).
-  + by rewrite (well_orderedWl (lb':=None) erefl lrwo) /well_ordered rwo.
-  + by rewrite /well_ordered llwo lrwo rwo !andbT.
+case_bal l r; rewrite !elements_node//.
+- by move=> _ _; rewrite -!catA !cat_cons.
+- by move=> _ _; rewrite -!catA !cat_cons.
+- by move=> _ _; rewrite -!catA !cat_cons -catA.
+- by move=> _ _; rewrite -!catA !cat_cons.
+Qed.
+
+Lemma mem_bal y l x r : well_ordered (bal l x r) `]-oo, +oo[ -> mem (bal l x r) y = (y == x) || (mem l y) || (mem r y).
+Proof.
+move=> wo; rewrite mem_elements// elements_bal mem_cat in_cons orbCA orbA.
+move: wo; rewrite well_ordered_bal => /andP[] /andP[] _.
+move=> /well_orderedWT/mem_elements <-. 
+by move=> /well_orderedWT/mem_elements <-. 
 Qed.
 
 Lemma card_bal l x r : card (bal l x r) = (card l + card r).+1.
@@ -813,13 +905,15 @@ Qed.
 Lemma balanced_add x s : well_formed s -> balanced s -> balanced (add x s).
 Proof. by move=> swf /(balanced_height_add x swf) /andP[]. Qed.
 
-Lemma well_ordered_add x s lb ub : well_ordered s lb ub -> lto lb (Some x) -> lto (Some x) ub -> well_ordered (add x s) lb ub.
+Lemma well_ordered_add x s itv : well_ordered s itv -> x \in itv -> well_ordered (add x s) itv.
 Proof.
-elim: s lb ub => /= [_ lb ub -> -> //|] l IHl sx r IHr h lb ub /andP[]/andP[]/andP[] lbsx sxub lwo rwo lbx xub.
+elim: s itv => /= [_ itv -> //|] l IHl sx r IHr h itv /andP[]/andP[] sxi lwo rwo xi.
 case /comparable_ltgtP: (comparableT x sx) => [sxx|xsx|->].
-- by rewrite well_ordered_bal lbsx rwo IHl//= sxub.
-- by rewrite well_ordered_bal lbsx lwo IHr//= sxub.
-- by rewrite /= lbsx sxub lwo.
+- rewrite well_ordered_bal sxi rwo IHl//=.
+  by move: xi; rewrite !itv_boundlr => /andP[] -> _; rewrite bnd_simp.
+- rewrite well_ordered_bal sxi lwo IHr//=.
+  by move: xi; rewrite !itv_boundlr => /andP[_] ->; rewrite bnd_simp xsx.
+- by rewrite /= sxi lwo.
 Qed.
 
 Lemma is_avl_add x s : is_avl s -> is_avl (add x s).
@@ -830,24 +924,25 @@ move=> /andP[]/andP[] swf sb swo; apply/andP; split; [apply/andP; split|].
 - exact/well_ordered_add.
 Qed.
 
-Lemma mem_add y x s : well_ordered s None None -> mem y (add x s) = (y == x) || (mem y s).
+Lemma mem_add y x s : well_ordered s `]-oo, +oo[ -> mem (add x s) y = (y == x) || (mem s y).
 Proof.
 elim: s => /= [_|l IHl sx r IHr h /andP[] lwo rwo]; first by rewrite if_same.
 case /comparable_ltgtP: (comparableT x sx) => [sxx|xsx|<-]; last first.
 - by rewrite /= orbA orbb.
 - rewrite mem_bal; last first.
-    by rewrite well_ordered_bal lwo/=; apply/well_ordered_add.
-  rewrite IHr ?(well_orderedW rwo)//.
+    rewrite well_ordered_bal lwo/=; apply/well_ordered_add => //.
+    by rewrite in_itv/= xsx.
+  rewrite (IHr (well_orderedWT rwo))//.
   move: (@mem_node y l sx r h) => /= ->; last by rewrite lwo.
   by rewrite !orbA; congr orb; rewrite orbC !orbA.
 - rewrite mem_bal; last first.
     by rewrite well_ordered_bal rwo/= andbT; apply/well_ordered_add.
-  rewrite IHl ?(well_orderedW lwo)//.
+  rewrite (IHl (well_orderedWT lwo)).
   move: (@mem_node y l sx r h) => /= ->; last by rewrite lwo.
   by rewrite !orbA; congr orb; rewrite orbAC orbC !orbA.
 Qed.
 
-Lemma card_add x s : card (add x s) = card s + (~~ mem x s).
+Lemma card_add x s : card (add x s) = card s + (~~ mem s x).
 Proof.
 elim: s => [//|] l IHl sx r IHr h/=.
 case /comparable_ltgtP: (comparableT x sx) => /= _.
@@ -890,26 +985,32 @@ Qed.
 Lemma balanced_add_min_element x s : well_formed s -> balanced s -> balanced (add_min_element x s).
 Proof. by move=> swf /(balanced_height_add_min_element x swf)/andP[]. Qed.
 
-Lemma well_ordered_add_min_element x s lb ub : well_ordered s (Some x) ub -> lto lb (Some x) -> lto (Some x) ub -> well_ordered (add_min_element x s) lb ub.
+Lemma well_ordered_add_min_element x s itv : well_ordered s (Interval (BRight x) itv.2) -> x \in itv -> well_ordered (add_min_element x s) itv.
 Proof.
-elim: s lb ub => /= [lb ub _ -> ->//|l IHl sx r _ h] lb ub /andP[]/andP[]/andP[] xsx sxub lwo rwo lbx xub.
-by rewrite well_ordered_bal/= (lto_trans (m:=Some sx) lbx xsx) sxub rwo/= andbT; apply/IHl.
+elim: s itv => /= [itv _ ->//|l IHl sx r _ h] itv /andP[]/andP[]/andP[].
+rewrite bnd_simp => xsx sxi lwo rwo /[dup] xitv.
+rewrite itv_boundlr => /andP[] ix xi.
+rewrite well_ordered_bal rwo itv_boundlr sxi !andbT; apply/andP; split.
+  by apply/(le_trans ix)/ltW.
+by apply/IHl => //; rewrite itv_boundlr/= ix.
 Qed.
 
-Lemma mem_add_min_element y x s : well_ordered s (Some x) None -> mem y (add_min_element x s) = (y == x) || (mem y s).
+Lemma elements_add_min_element x s :
+  elements (add_min_element x s) = x :: elements s.
 Proof.
-elim: s => /= [_|l IHl sx r IHr h /andP[]/andP[]/andP[] xsx _ lwo rwo]; first by rewrite if_same.
-rewrite mem_bal; last by rewrite well_ordered_bal/= rwo andbT; apply/well_ordered_add_min_element.
-rewrite IHl ?(well_orderedWr (ub':=None) erefl lwo)//.
-move: (@mem_node y l sx r h) => /= ->; last by rewrite (well_orderedWl (lb':=None) erefl lwo).
-by rewrite !orbA; congr orb; rewrite orbAC orbC !orbA.
+elim: s => [//|l IHl y r _ h]/=.
+by rewrite elements_bal IHl elements_node cat_cons.
 Qed.
 
-Lemma card_add_min_element x s : well_ordered s (Some x) None -> card (add_min_element x s) = (card s).+1.
+Lemma mem_add_min_element y x s : well_ordered s `]x, +oo[ -> mem (add_min_element x s) y = (y == x) || (mem s y).
 Proof.
-elim: s => [//|] l IHl sx r _ h/= /andP[]/andP[]/andP[] xsx _ lwo rwo.
-by rewrite card_bal IHl ?(well_orderedWr _ lwo)// addSn addnAC.
+move=> swo; rewrite mem_elements; last exact/well_ordered_add_min_element.
+rewrite mem_elements; last exact/(well_orderedWT swo).
+by rewrite elements_add_min_element in_cons.
 Qed.
+
+Lemma card_add_min_element x s : card (add_min_element x s) = (card s).+1.
+Proof. by rewrite !cardE elements_add_min_element. Qed.
 
 Lemma well_formed_add_max_element x s : well_formed s -> well_formed (add_max_element x s).
 Proof.
@@ -942,28 +1043,32 @@ rewrite maxnSS !ltnS eqSS -maxnA [maxn (height xrll) (maxn _ _)]maxnA => /maxn_i
   by rewrite (maxn_idPr (leqnSn _)) leqnn leqnSn.
 Qed.
 
-Lemma well_ordered_add_max_element x s lb ub : well_ordered s lb (Some x) -> lto lb (Some x) -> lto (Some x) ub -> well_ordered (add_max_element x s) lb ub.
+Lemma well_ordered_add_max_element x s itv : well_ordered s (Interval itv.1 (BLeft x)) -> x \in itv -> well_ordered (add_max_element x s) itv.
 Proof.
-elim: s lb ub => /= [lb ub _ -> ->//|l _ sx r IHr h] lb ub /andP[]/andP[]/andP[] lbsx sxx lwo rwo lbx xub.
-rewrite well_ordered_bal lbsx lwo.
-by move: (lto_trans (n:=Some sx) sxx xub) => /= ->; apply/IHr.
+elim: s itv => /= [itv _ ->//|l _ sx r IHr h] itv /andP[]/andP[].
+rewrite itv_boundlr/= bnd_simp => /andP[] isx sxx lwo rwo /[dup] xitv.
+rewrite itv_boundlr => /andP[] ix xi.
+rewrite well_ordered_bal lwo itv_boundlr isx/= andbT; apply/andP; split.
+  by apply/(le_trans _ xi)/ltW.
+by apply/IHr => //; rewrite itv_boundlr/= xi andbT; apply/ltW.
 Qed.
 
-Lemma mem_add_max_element y x s : well_ordered s None (Some x) -> mem y (add_max_element x s) = (y == x) || (mem y s).
+Lemma elements_add_max_element x s :
+  elements (add_max_element x s) = rcons (elements s) x.
 Proof.
-elim: s => /= [_|l IHl sx r IHr h /andP[]/andP[] sxx lwo rwo]; first by rewrite if_same.
-rewrite mem_bal; last first.
-  by rewrite well_ordered_bal lwo/=; apply/well_ordered_add_max_element.
-rewrite IHr ?(well_orderedWl (lb':=None) erefl rwo)//.
-move: (@mem_node y l sx r h) => /= ->; last by rewrite lwo (well_orderedWr (ub':=None) erefl rwo).
-by rewrite !orbA; congr orb; rewrite orbC !orbA.
+elim: s => [//|l _ y r IHr h]/=.
+by rewrite elements_bal IHr elements_node rcons_cat.
 Qed.
 
-Lemma card_add_max_element x s : well_ordered s None (Some x) -> card (add_max_element x s) = (card s).+1.
+Lemma mem_add_max_element y x s : well_ordered s `]-oo, x[ -> mem (add_max_element x s) y = (y == x) || (mem s y).
 Proof.
-elim: s => [//|] l _ sx r IHr h/= /andP[]/andP[] sxx lwo rwo.
-by rewrite card_bal IHr ?(well_orderedWl _ rwo)// addnS.
+move=> swo; rewrite mem_elements; last exact/well_ordered_add_max_element.
+rewrite mem_elements; last exact/(well_orderedWT swo).
+by rewrite elements_add_max_element mem_rcons.
 Qed.
+
+Lemma card_add_max_element x s : card (add_max_element x s) = (card s).+1.
+Proof. by rewrite !cardE elements_add_max_element size_rcons. Qed.
 
 Lemma well_formed_join l x r : well_formed l -> well_formed r -> well_formed (join l x r).
 Proof.
@@ -1042,54 +1147,47 @@ Qed.
 Lemma balanced_join l x r : well_formed l -> well_formed r -> balanced l -> balanced r -> balanced (join l x r).
 Proof. by move=> lwf rwf lb /(balanced_height_join x lwf rwf lb) /andP[]. Qed.
 
-Lemma well_ordered_join l x r lb ub : well_ordered l lb (Some x) -> well_ordered r (Some x) ub -> lto lb (Some x) -> lto (Some x) ub -> well_ordered (join l x r) lb ub. 
+Lemma well_ordered_join l x r itv : well_ordered l (Interval itv.1 (BLeft x)) -> well_ordered r (Interval (BRight x) itv.2) -> x \in itv -> well_ordered (join l x r) itv. 
 Proof.
-elim: l r lb ub => [|ll IHll lx lr IHlr lh] r lb ub lwo rwo lbx xub; first exact/well_ordered_add_min_element.
-elim: r ub xub rwo => [|rl IHrl rx rr IHrr rh] ub xub rwo; first exact/well_ordered_add_max_element.
-move=> /=; case (leq_diffn2P _ _) => [rhlh|lhrh|_]; last by move: lwo rwo lbx xub => /= -> -> -> ->.
-  move: lwo => /= /andP[]/andP[]/andP[] lblx lxx llwo lrwo.
-  by rewrite well_ordered_bal lblx (lto_trans (n:=Some lx) lxx xub) llwo IHlr.
-move: rwo => /= /andP[]/andP[]/andP[] xrx rxub rlwo rrwo.
-by rewrite well_ordered_bal (lto_trans (m:=Some rx) lbx xrx)/= rxub rrwo IHrl.
+case: itv => lb ub; rewrite itv_boundlr/=.
+elim: l r lb ub => /= [|ll IHll lx lr IHlr lh] r lb ub lwo rwo xitv; first exact/well_ordered_add_min_element.
+move: (xitv) (lwo); rewrite itv_boundlr/= => /andP[] lbx xub /andP[]/andP[]/andP[] lblx lxx llwo lrwo.
+elim: r ub xitv xub rwo => [|rl IHrl rx rr IHrr rh] ub xitv xub rwo.
+  rewrite well_ordered_bal itv_boundlr/= lblx llwo/= andbT; apply/andP; split.
+    exact/(le_trans lxx)/ltW.
+  apply/well_ordered_add_max_element => //.
+  by rewrite itv_boundlr/= lxx.
+move=> /=; case (leq_diffn2P _ _) => [rhlh|lhrh|_]; last exact/well_ordered_create.
+  rewrite well_ordered_bal llwo IHlr// ?lxx// itv_boundlr lblx/= !andbT.
+  exact/(le_trans lxx)/ltW.
+rewrite well_ordered_bal. 
+move: rwo => /= /andP[]/andP[]/andP[] xrx rxub rlwo ->.
+rewrite itv_boundlr rxub !andbT; apply/andP; split.
+  exact/(le_trans lbx)/ltW.
+by apply/IHrl => //; rewrite lbx; apply/ltW.
 Qed.
 
-Lemma mem_join y l x r : well_ordered l None (Some x) -> well_ordered r (Some x) None -> mem y (join l x r) = (y == x) || (mem y l) || (mem y r).
+Lemma elements_join l x r : elements (join l x r) = elements l ++ x :: elements r.
 Proof.
-move=> lwo rwo; move: lwo rwo (well_ordered_join lwo rwo erefl erefl).
-elim: l r => [|ll IHll lx lr IHlr lh] r lwo rwo swo; first by rewrite /= orbF; apply/mem_add_min_element.
-elim: r rwo swo => [|rl IHrl rx rr IHrr rh] rwo swo; first by rewrite (mem_add_max_element y lwo) orbF.
-rewrite mem_node ?(well_orderedW lwo)// mem_node ?(well_orderedW rwo)//. 
-move: (lwo) (rwo) swo => /= /andP[]/andP[] lxx llwo lrwo /andP[]/andP[]/andP[] xrx _ rlwo rrwo.
-case: (leq_diffn2P _ _) => _ swo; last first.
-- rewrite mem_create// !mem_node//=; apply/andP; split=> //=.
-    exact: (well_orderedWl (lb':=None) erefl rlwo).
-  exact: (well_orderedWr (ub':=None) erefl lrwo).
-- rewrite mem_bal// IHrl; first last.
-  + by move: swo; rewrite well_ordered_bal => /andP[]/andP[]/andP[] _ _ /(well_orderedWr (ub':=None) erefl) + _.
-  + exact/(well_orderedWr (ub:=Some rx)).
-  rewrite mem_node; last exact/(well_orderedWr (ub:=Some x)).
-  rewrite !orbA; congr (_ || _ || _).
-  by rewrite [RHS]orbC !orbA.
-- rewrite mem_bal// IHlr//; first last.
-  + by move: swo; rewrite well_ordered_bal => /andP[]/andP[]/andP[] _ _ _ /(well_orderedWl (lb':=None) erefl).
-  + exact/(well_orderedWl (lb:=Some lx)).
-  rewrite mem_node; last exact/(well_orderedWl (lb:=Some x)).
-  rewrite !orbA; congr (_ || _ || _ || _ || _).
-  by rewrite orbC !orbA.
+elim: l r => /= [|ll IHll lx lr IHlr lh] r; first exact/elements_add_min_element.
+rewrite elements_node; elim: r => [|rl IHrl rx rr IHrr rh].
+  by rewrite elements_bal elements_add_max_element cats1 rcons_cat.
+case: (_ <= 2); first by rewrite !elements_node.
+case: (_ < _); first by rewrite elements_bal IHlr -catA cat_cons.
+by rewrite elements_bal IHrl elements_node -catA cat_cons.
 Qed.
 
-Lemma card_join l x r : well_ordered l None (Some x) -> well_ordered r (Some x) None -> card (join l x r) = (card l + card r).+1.
+Lemma mem_join y l x r : well_ordered l `]-oo, x[ -> well_ordered r `]x, +oo[ -> mem (join l x r) y = (y == x) || (mem l y) || (mem r y).
 Proof.
-elim: l r => [|ll IHll lx lr IHlr lh] r lwo rwo/=.
-  exact/card_add_min_element.
-move: (lwo) => /= /andP[]/andP[] lxx llwo lrwo.
-elim: r rwo => [|rl IHrl rx rr IHrr rh] rwo/=.
-  by rewrite card_bal card_add_max_element ?(well_orderedWl (lb':=None) erefl lrwo)// addnS addn0.
-move: (rwo) => /= /andP[]/andP[]/andP[] xrx _ rlwo rrwo.
-case: (leq_diffn2P _ _) => _ //=.
-- by rewrite card_bal IHlr// ?(well_orderedWl (lb':=None) erefl lrwo)//= addSn !addnS addnA.
-- by rewrite card_bal IHrl// ?(well_orderedWr (ub':=None) erefl rlwo)//= addnS !addSn addnA.
+move=> lwo rwo.
+rewrite mem_elements; last exact/well_ordered_join.
+rewrite mem_elements; last exact/(well_orderedWT lwo).
+rewrite mem_elements; last exact/(well_orderedWT rwo).
+by rewrite elements_join mem_cat in_cons orbCA orbA.
 Qed.
+
+Lemma card_join l x r : card (join l x r) = (card l + card r).+1.
+Proof. by rewrite !cardE elements_join size_cat/= addnS. Qed.
 
 Lemma well_formed_remove_min s : well_formed s -> well_formed (remove_min s).
 Proof.
@@ -1125,94 +1223,111 @@ Proof. by move=> swf /(balanced_height_remove_min swf) /andP[]. Qed.
 Lemma height_remove_min s : well_formed s -> balanced s -> (height (remove_min s) <= height s <= (height (remove_min s)).+1).
 Proof. by move=> swf /(balanced_height_remove_min swf) /andP[]. Qed.
 
-Lemma minP x s : well_ordered s None None -> mem x s -> leo (min s) (Some x).
+Lemma min0P s : (min s == None) = (s == leaf elt).
+Proof. by elim: s => [//|+ + sx r _ h]; case. Qed.
+
+Lemma minP x s : well_ordered s `]-oo, +oo[ -> mem s x -> map_or (fun m => m <= x)%O false (min s).
 Proof.
 elim: s x => [//|l IHl sx r _ h] x swo.
-rewrite mem_node// orbC orbA; move: swo => /= /andP[] lwo /well_ordered_lbP/= xr.
-case: l IHl lwo => [/=|ll lx lr lh] mP lwo.
-  by rewrite orbF => /orP; case=> [/xr/ltW//|/eqP ->]; apply/lexx.
-move=> /orP; case => [xm|/(mP _ (well_orderedW lwo))//].
-move: mP => /(_ lx (well_orderedW lwo)); mp=> [|mlx]; first by rewrite /= eqxx.
-apply/(leo_trans mlx) => /=; move: (well_ordered_ubP (x:=lx) lwo); mp=> [|/= /ltW lxsx].
-  by rewrite /= eqxx.
-move: xm => /orP; case=> [/xr/ltW|/eqP ->//].
-exact/(le_trans lxsx).
+rewrite mem_node// orbC orbA; move: swo => /= /andP[] lwo /mem_well_ordered rsx.
+  case: l IHl lwo => [/=|ll lx lr lh] mP lwo.
+  rewrite orbF => /orP; case=> [/rsx|/eqP ->]; last exact/lexx.
+  by rewrite in_itv/= => /andP[] /ltW.
+move=> /orP; case => [xm|/(mP _ (well_orderedWT lwo))//].
+have lxP: mem (node ll lx lr lh) lx by rewrite /= eqxx.
+move: mP => /(_ lx (well_orderedWT lwo) lxP).
+case: (min _) => [m|//] /= mlx; apply/(le_trans mlx).
+move: (mem_well_ordered lwo lxP); rewrite in_itv/= => /ltW lsx.
+apply/(le_trans lsx).
+by move: xm => /orP; case=> [/rsx|/eqP -> //]; rewrite in_itv/= => /andP[] /ltW.
 Qed.
 
-Lemma mem_min s : well_ordered s None None -> map_or (fun x => mem x s) (s == leaf elt) (min s).
+Lemma mem_min s : well_ordered s `]-oo, +oo[ -> map_or (mem s) (s == leaf elt) (min s).
 Proof.
 elim: s => [//|] l + x r _ h.
 rewrite /min -/(min l); case: l => [|ll lx lr lh].
   by move=> _ _ /=; rewrite eqxx.
 have: (node ll lx lr lh != leaf elt) by [].
 move: (node ll lx lr lh) => l; case: (min l) => [m _ IHl swo|/negP l0]/=; last first.
-  by move=> /[swap] /andP[] /well_orderedW lwo _ /(_ lwo).
-rewrite -/(mem m (node l x r h)) mem_node//.
-by move: swo IHl => /= /andP[] /well_orderedW lwo _ -> //; rewrite orbT.
+  by move=> /[swap] /andP[] /well_orderedWT lwo _ /(_ lwo).
+rewrite -/(mem (node l x r h) m) mem_node//.
+by move: swo IHl => /= /andP[] /well_orderedWT lwo _ -> //; rewrite orbT.
 Qed.
 
-Lemma maxP x s : well_ordered s None None -> mem x s -> leo (Some x) (max s).
+Lemma max0P s : (max s == None) = (s == leaf elt).
+Proof. by elim: s => [//|l _ sx + +  h]; case. Qed.
+
+Lemma maxP x s : well_ordered s `]-oo, +oo[ -> mem s x -> map_or (fun m => x <= m)%O false (max s).
 Proof.
 elim: s x => [//|l _ sx r IHr h] x swo.
-rewrite mem_node//; move: swo => /= /andP[] /well_ordered_ubP/= xl rwo.
+rewrite mem_node//; move: swo => /= /andP[] /mem_well_ordered/= lsx rwo.
 case: r IHr rwo => [/=|rl rx rr rh] mP rwo.
-  by rewrite orbF => /orP; case=> [/eqP ->|/xl/ltW//]; apply/lexx.
-move=> /orP; case => [xm|/(mP _ (well_orderedW rwo))//].
-move: mP => /(_ rx (well_orderedW rwo)); mp=> [|mrx]; first by rewrite /= eqxx.
-move=> /=; move: (erefl (leo (Some x) (max (node rl rx rr rh)))); rewrite [RHS]/= => <-.
-refine (leo_trans _ mrx) => /=; move: (well_ordered_lbP (x:=rx) rwo); mp=> [|/= /ltW sxrx].
-  by rewrite /= eqxx.
-move: xm => /orP; case=> [/eqP ->//|/xl/ltW] xsx.
-exact/(le_trans xsx sxrx).
+  rewrite orbF => /orP; case=> [/eqP ->|/lsx]; first exact/lexx.
+  by rewrite in_itv/= => /ltW.
+move=> /orP; case => [xm|/(mP _ (well_orderedWT rwo))//].
+have rxP: mem (node rl rx rr rh) rx by rewrite /= eqxx.
+move: mP => /(_ rx (well_orderedWT rwo) rxP).
+case: (max _) => [m|//]/= rxm; apply/(le_trans _ rxm).
+move: (mem_well_ordered rwo rxP); rewrite in_itv/= andbT => /ltW srx.
+apply/(le_trans _ srx).
+move: xm => /orP; case=> [/eqP ->//|/lsx].
+by rewrite in_itv/= => /ltW.
 Qed. 
 
-Lemma mem_max s : well_ordered s None None -> map_or (fun x => mem x s) true (max s).
+Lemma mem_max s : well_ordered s `]-oo, +oo[ -> map_or (mem s) true (max s).
 Proof.
 elim: s => [//|] l _ x r + h.
 rewrite /max -/(max r); case: r => [|rl rx rr rh].
   by move=> _ _ /=; rewrite eqxx.
 move: (node rl rx rr rh) => r; case: (max r) => [|//] m IHr swo.
-rewrite /= -/(mem m (node l x r h)) mem_node//.
-by move: swo IHr => /= /andP[] _ /well_orderedW rwo -> //; rewrite !orbT.
+rewrite /= -/(mem (node l x r h) m) mem_node//.
+by move: swo IHr => /= /andP[] _ /well_orderedWT rwo -> //; rewrite !orbT.
 Qed.
 
-Lemma well_ordered_remove_min s ub : well_ordered s None ub -> well_ordered (remove_min s) (min s) ub.
+Lemma well_ordered_remove_min s ub : well_ordered s (Interval -oo ub) -> well_ordered (remove_min s) (Interval (map_or BRight -oo (min s)) ub).
 Proof.
-elim: s ub => [//|l IHl x r _ h]/= ub /andP[]/andP[] xub /[dup] lwo' {}/IHl + rwo.
+elim: s ub => [//|l IHl x r _ h]/= ub /andP[]/andP[].
+rewrite itv_boundlr/= => xub /[dup] lwo' {}/IHl + rwo.
 case: l lwo' => [//|ll lx lr lh] lwo' lwo.
-rewrite well_ordered_bal lwo rwo/= xub.
-move: (lwo') => /[dup] /well_orderedW lwoN /well_ordered_ubP-/(_ lx); mp => [|lxx].
+rewrite well_ordered_bal lwo rwo.
+move: (lwo') => /[dup] /well_orderedWT lwoN /mem_well_ordered-/(_ lx); mp.
   by rewrite /= eqxx.
-move: (minP (x:=lx) lwoN); mp => [|mlx]; first by rewrite /= eqxx.
-by move: (leo_lto_trans mlx lxx) => /= ->.
+rewrite in_itv => lxx.
+move: (minP (x:=lx) lwoN); mp; first by rewrite /= eqxx.
+case: (min _) => [m|//] /= mlx.
+rewrite itv_boundlr/= xub !andbT.
+exact/(le_lt_trans mlx lxx).
 Qed.
 
-Lemma mem_remove_min x s : well_ordered s None None -> mem x (remove_min s) = (Some x != min s) && (mem x s).
+Lemma elements_min s : elements s = (map_or cons id (min s) (elements (remove_min s))).
 Proof.
-elim: s => [//|] l + sx r _ h.
-case: l => [|ll lx lr lh IHl swo].
-  move=> _ /= rwo; rewrite (inj_eq Some_inj) andb_orr andNb/= fun_if ifFb -leNgt eq_sym andbA -lt_neqAle andbC.
-  by apply/esym/imply_andbl/implyP => /(well_ordered_lbP rwo).
-rewrite [LHS]/= [X in _ = X && _]/= -/(remove_min (node ll lx lr lh)) -/(min (node ll lx lr lh)).
-move: (node ll lx lr lh) IHl swo => l IHl swo.
-rewrite mem_node// mem_bal; last first.
-  move: swo => /= /andP[] lwo rwo.
-  rewrite well_ordered_bal rwo/= andbT; apply/(well_orderedWl (lb:=min l)) => //.
-  exact/well_ordered_remove_min.
-move: swo => /= /andP[] /[dup] lwo /well_orderedW lwoN rwo.
-rewrite IHl// 2!andb_orr; (congr (_ || _ || _);
-    rewrite andbC; apply/esym/imply_andbl/implyP) => [/eqP ->|xr];
-    apply/negP => /eqP mE; move: (mem_min lwoN); rewrite -mE/= => /(well_ordered_ubP lwo)/=.
-  by rewrite ltxx.
-move: (well_ordered_lbP rwo xr) => /ltW. 
-by rewrite leNgt => /negP.
+elim: s => [//|l IHl x r IHr h] /=.
+case: l IHl => // ll y lr lh IHl.
+by rewrite elements_bal elements_node IHl; case: (min _).
 Qed.
 
-Lemma mem_remove_min' x s : well_ordered s None None -> mem x s = (Some x == min s) || (mem x (remove_min s)).
+Lemma elements_remove_min s : elements (remove_min s) = behead (elements s).
 Proof.
-move=> swo; rewrite (mem_remove_min _ swo) orb_andr orbN/= orbC.
-case/boolP: (mem x s) => [//|] /= /negP xs; apply/esym/negP => /eqP xm.
-by move: (mem_min swo); rewrite -xm.
+by rewrite [in RHS]elements_min; case: (min s) (min0P s) => [x _|/esym/eqP ->].
+Qed.
+
+Lemma mem_remove_min x s : well_ordered s `]-oo, +oo[ -> mem (remove_min s) x = (Some x != min s) && (mem s x).
+Proof.
+move=> swo; rewrite !mem_elements//; last first.
+  exact/(well_orderedWTl (well_ordered_remove_min swo)).
+move: (sorted_elements swo); rewrite elements_min sorted_pairwise; last first.
+  exact/lt_trans.
+case: (min s) (min0P s) => [y _|/esym/eqP -> //] /= /andP[] /allP ys _.
+rewrite in_cons (inj_eq Some_inj).
+have [-> /=|//] := eqVneq x y.
+by apply/negP => /ys; rewrite ltxx.
+Qed.
+
+Lemma mem_remove_min' x s : well_ordered s `]-oo, +oo[ -> mem s x = (Some x == min s) || (mem (remove_min s) x).
+Proof.
+move=> swo; rewrite !mem_elements//; last first.
+  exact/(well_orderedWTl (well_ordered_remove_min swo)).
+by rewrite elements_min; case: (min s).
 Qed.
 
 Lemma card_remove_min s : card (remove_min s) = (card s).-1.
@@ -1241,7 +1356,7 @@ apply/(leq_trans (leq_diffnD (height r) _ _))/(leq_add lrd).
 by rewrite -rE diffn_subnE (maxn_idPl (leqnSn _)) (minn_idPr (leqnSn _)) subSnn.
 Qed.
 
-Lemma height_merge l r : well_formed l -> well_formed r -> balanced r -> diffn (height l) (height r) <= 2 -> well_ordered r None None -> maxn (height l) (height r) <= (height (merge l r)) <= (maxn (height l) (height r)).+1.
+Lemma height_merge l r : well_formed l -> well_formed r -> balanced r -> diffn (height l) (height r) <= 2 -> well_ordered r `]-oo, +oo[ -> maxn (height l) (height r) <= (height (merge l r)) <= (maxn (height l) (height r)).+1.
 Proof.
 move=> lwf rwf rb lrd rwo; rewrite /merge; case: (min r) (mem_min rwo) => [m _|/= /eqP -> /=]; last by rewrite maxn0 leqnn leqnSn.
 move: (height_remove_min rwf rb) (height_bal m lwf (well_formed_remove_min rwf)) => /andP[] mr rm /=.
@@ -1252,28 +1367,36 @@ rewrite (leq_trans mr rl) andbT -ltnNge => /ltnW/ltnW {}rl.
 by rewrite (maxn_idPl (leq_trans rm rl)) (maxn_idPl (ltnW rl)) ltnS => /andP[] -> ->.
 Qed.
 
-Lemma well_ordered_merge l r lb ub : well_ordered l lb (omin (min r) ub) -> well_ordered r lb ub -> well_ordered (merge l r) lb ub.
+Lemma well_ordered_merge l r itv : well_ordered l (Interval itv.1 (map_or BLeft itv.2 (min r))) -> well_ordered r itv -> well_ordered (merge l r) itv.
 Proof.
-move=> + /[dup] rwo /well_orderedW rwoN; move: (mem_min rwoN) (well_ordered_remove_min (well_orderedWl (lb':=None) erefl rwo)).
-rewrite /merge; case: (min r) => [|//] m /= mr mwo lwo.
-move: (well_ordered_lbP (well_orderedWr (ub':=None) erefl rwo) mr) (well_ordered_ubP (well_orderedWl (lb':=None) erefl rwo) mr) => lbm mub.
-rewrite well_ordered_bal lbm mub mwo andbT/=.
-move: lwo; congr well_ordered.
-by case: ub mub {mwo rwo} => [|//] ub/= mub; rewrite minElt mub.
+move=> + /[dup] rwo /well_orderedWTl/well_ordered_remove_min.
+move: (mem_min (well_orderedWT rwo)).
+rewrite /merge; case: (min r) => [m|_ + _]/=; last first.
+  by case: itv {rwo}.
+move=> /(mem_well_ordered rwo) mi lwo {}rwo.
+by rewrite well_ordered_bal mi lwo.
 Qed.
 
-Lemma mem_merge x l r : well_ordered l None (min r) -> well_ordered r None None -> mem x (merge l r) = (mem x l || mem x r).
+Lemma elements_merge l r : elements (merge l r) = elements l ++ elements r.
 Proof.
-rewrite /merge => + rwo; case: (min r) (mem_min rwo) (mem_remove_min' x rwo) (well_ordered_remove_min rwo) => /= [m _|/eqP ->] xr mrwo lwo; last by rewrite orbF.
-rewrite mem_bal; last by rewrite well_ordered_bal/= lwo/=.
-by rewrite xr (inj_eq Some_inj) orbA; congr orb; exact: orbC.
+rewrite /merge; case: (min r) (min0P r) (elements_min r) => [x _ ->|/esym/eqP -> _] /=.
+  exact/elements_bal.
+by rewrite cats0.
 Qed.
 
-Lemma card_merge l r : well_ordered r None None -> card (merge l r) = card l + card r.
+Lemma mem_merge x l r : well_ordered l (Interval -oo (map_or BLeft +oo (min r))) -> well_ordered r `]-oo, +oo[ -> mem (merge l r) x = (mem l x || mem r x).
 Proof.
-rewrite /merge => rwo; case: (min r) (mem_min rwo) => [x xr|/eqP ->]; last by rewrite addn0.
+move=> lwo rwo; rewrite !mem_elements//.
+- by rewrite elements_merge mem_cat.
+- exact/(well_orderedWT lwo).
+- exact/well_ordered_merge.
+Qed.
+
+Lemma card_merge l r : card (merge l r) = card l + card r.
+Proof.
+rewrite /merge; case: (min r) (min0P r) => [x xr|/esym/eqP ->]; last by rewrite addn0.
 rewrite card_bal card_remove_min -addnS; congr (_ + _).
-by case: r rwo xr.
+by case: r xr.
 Qed.
 
 Lemma well_formed_concat l r : well_formed l -> well_formed r -> well_formed (concat l r).
@@ -1290,28 +1413,33 @@ apply/balanced_join => //.
 - exact/balanced_remove_min.
 Qed.
 
-Lemma well_ordered_concat l r lb ub : well_ordered l lb (omin (min r) ub) -> well_ordered r lb ub -> well_ordered (concat l r) lb ub.
+Lemma well_ordered_concat l r itv : well_ordered l (Interval itv.1 (map_or BLeft itv.2 (min r))) -> well_ordered r itv -> well_ordered (concat l r) itv.
 Proof.
-move=> + /[dup] rwo /well_orderedW rwoN; move: (mem_min rwoN) (well_ordered_remove_min (well_orderedWl (lb':=None) erefl rwo)).
-rewrite /concat; case: (min r) => [|//] m /= mr mwo lwo.
-move: (well_ordered_lbP (well_orderedWr (ub':=None) erefl rwo) mr) (well_ordered_ubP (well_orderedWl (lb':=None) erefl rwo) mr) => lbm mub.
-apply/well_ordered_join => //.
-move: lwo; congr well_ordered.
-by case: ub mub {mwo rwo} => [|//] ub/= mub; rewrite minElt mub.
+move=> + /[dup] rwo /well_orderedWTl/well_ordered_remove_min.
+move: (mem_min (well_orderedWT rwo)).
+rewrite /concat; case: (min r) => [m|/eqP -> + _]/=; last first.
+  by case: itv {rwo}.
+move=> /(mem_well_ordered rwo) mi lwo {}rwo.
+by rewrite well_ordered_join.
 Qed.
 
-Lemma mem_concat x l r : well_ordered l None (min r) -> well_ordered r None None -> mem x (concat l r) = (mem x l || mem x r).
+Lemma elements_concat l r : elements (concat l r) = elements l ++ elements r.
 Proof.
-rewrite /concat => + rwo; case: (min r) (mem_min rwo) (mem_remove_min' x rwo) (well_ordered_remove_min rwo) => /= [m _|/eqP ->] xr mrwo lwo; last by rewrite orbF.
-rewrite mem_join// xr (inj_eq Some_inj) orbA; congr orb; exact: orbC.
+rewrite /concat; case: (min r) (min0P r) (elements_min r) => [x _ ->|/esym/eqP -> _].
+  exact/elements_join.
+by rewrite cats0.
 Qed.
 
-Lemma card_concat l r : well_ordered l None (min r) -> well_ordered r None None -> card (concat l r) = card l + card r.
+Lemma mem_concat x l r : well_ordered l (Interval -oo (map_or BLeft +oo (min r))) -> well_ordered r `]-oo, +oo[ -> mem (concat l r) x = (mem l x || mem r x).
 Proof.
-rewrite /concat => + rwo; case: (min r) (mem_min rwo) (well_ordered_remove_min rwo) => [x xr rwo' lwo|/eqP ->]; last by rewrite addn0.
-rewrite card_join// card_remove_min -addnS; congr (_ + _).
-by case: r lwo rwo rwo' xr.
+move=> lwo rwo; rewrite !mem_elements//.
+- by rewrite elements_concat mem_cat.
+- exact/(well_orderedWT lwo).
+- exact/well_ordered_concat.
 Qed.
+
+Lemma card_concat l r : well_ordered l (Interval -oo (map_or BLeft +oo (min r))) -> well_ordered r `]-oo, +oo[ -> card (concat l r) = card l + card r.
+Proof. by move=> lwo rwo; rewrite !cardE elements_concat size_cat. Qed.
 
 Lemma well_formed_splitl x s : well_formed s -> well_formed (split x s).1.1.
 Proof.
@@ -1369,56 +1497,57 @@ case /comparable_ltgtP: (comparableT x sx) => xsx; last first.
   by apply/(leq_trans jm); rewrite ltnS geq_max leq_maxr leq_max srl.
 Qed.
 
-Lemma well_ordered_splitl x s lb : well_ordered s lb None -> well_ordered (split x s).1.1 lb (Some x).
+Lemma well_ordered_splitl x s lb : well_ordered s (Interval lb +oo) -> well_ordered (split x s).1.1 (Interval lb (BLeft x)).
 Proof.
 elim: s lb => [//|] l IHl sx r IHr h lb /= /andP[]/andP[]/andP[] lbsx _ lwo rwo.
 case /comparable_ltgtP: (comparableT x sx) => [| |-> //] xsx.
-  by case: (split x l) (IHl _ (well_orderedWr (ub':=None) erefl lwo)) => [[]].
+  by case: (split x l) (IHl _ (well_orderedWTr lwo)) => [[]].
 case: (split x r) (IHr _ rwo) => [[/=]] sr _ _ srwo.
-by apply/well_ordered_join.
+by apply/well_ordered_join => //=; rewrite itv_boundlr/= lbsx.
 Qed.
 
-Lemma well_ordered_splitr x s ub : well_ordered s None ub -> well_ordered (split x s).2 (Some x) ub.
+Lemma well_ordered_splitr x s ub : well_ordered s (Interval -oo ub) -> well_ordered (split x s).2 (Interval (BRight x) ub).
 Proof.
 elim: s ub => [//|] l IHl sx r IHr h ub /= /andP[]/andP[] sxub lwo rwo.
 case /comparable_ltgtP: (comparableT x sx) => [| |-> //] xsx; last first.
-  by case: (split x r) (IHr _ (well_orderedWl (lb':=None) erefl rwo)) => [[]].
+  by case: (split x r) (IHr _ (well_orderedWTl rwo)) => [[]].
 case: (split x l) (IHl _ lwo) => [[/=]] _ _ sl slwo.
-by apply/well_ordered_join.
+by apply/well_ordered_join => //=; rewrite itv_boundlr/= bnd_simp xsx.
 Qed.
 
-Lemma mem_split x y s : well_ordered s None None -> mem x s = ((split y s).1.2 && (x == y)) || mem x (split y s).1.1 || mem x (split y s).2.
+Lemma elements_split x s : elements s = elements (split x s).1.1 ++ (if (split x s).1.2 then cons x else id) (elements (split x s).2).
 Proof.
-move=> swo.
-elim: s swo (well_ordered_splitl y swo) (well_ordered_splitr y swo) => [//|] l IHl sx r IHr h swo; rewrite mem_node//.
-move: swo => /= /andP[] lwo rwo.
-case /comparable_ltgtP: (comparableT y sx) => [| |-> //] ysx.
-  case: (split y l) (IHl (well_orderedW lwo)) (well_ordered_splitr y lwo) => [[/=]] sl sb sr {}IHl srwo slwo jwo.
-  rewrite mem_join//; last exact: (well_orderedWl _ srwo).
-  rewrite !orbA; congr orb.
-  rewrite [RHS]orbC !orbA [RHS]orbC -!orbA; congr orb.
-  by rewrite orbC; apply/IHl => //; apply: (well_orderedWr _ srwo).
-case: (split y r) (IHr (well_orderedW rwo)) (well_ordered_splitl y rwo) => [[/=]] sl sb sr {}IHr slwo jwo srwo.
-rewrite -!orbA [RHS]orbC.
-rewrite mem_join//; last exact: (well_orderedWr _ slwo).
-rewrite -!orbA; congr orb; congr orb.
-by rewrite orbA orbC orbA; apply/IHr => //; apply: (well_orderedWl _ slwo).
+elim: s => [//|l IHl sx r IHr h]/=; rewrite elements_node.
+case /comparable_ltgtP: (comparableT x sx) => [| |-> //] xsx; last first.
+  rewrite IHr; case: (split x r) => -[] rl rx rr/=.
+  by rewrite elements_join -catA cat_cons.
+rewrite IHl; case: (split x l) => -[] ll lx lr/=.
+by rewrite elements_join; case: lx; rewrite -catA// cat_cons.
 Qed.
 
-Lemma card_split x s : well_ordered s None None -> (split x s).1.2 + card (split x s).1.1 + card(split x s).2 = card s.
+Lemma mem_split x y s : well_ordered s `]-oo, +oo[ -> mem s x = ((split y s).1.2 && (x == y)) || mem (split y s).1.1 x || mem (split y s).2 x.
 Proof.
-move=> swo.
-elim: s swo (well_ordered_splitl x swo) (well_ordered_splitr x swo) => [//|] l IHl sx r IHr h swo.
-move: swo => /= /andP[] lwo rwo.
-case /comparable_ltgtP: (comparableT x sx) => [| |-> //] xsx.
-  case: (split x l) (IHl (well_orderedW lwo)) (well_ordered_splitr x lwo) => [[/=]] sl sb sr {}IHl srwo slwo jwo.
-  rewrite card_join//; last exact: (well_orderedWl _ srwo).
-  rewrite -!addnS addnA IHl//.
-  exact: (well_orderedWr _ srwo).
-case: (split x r) (IHr (well_orderedW rwo)) (well_ordered_splitl x rwo) => [[/=]] sl sb sr {}IHr slwo jwo srwo.
-rewrite card_join//; last exact: (well_orderedWr _ slwo).
-rewrite -!addSn addnA [sb + _]addnC -[_ + sb + _]addnA -addnA IHr//.
-exact: (well_orderedWl _ slwo).
+move=> swo; rewrite !mem_elements//; first last.
+- exact/(well_orderedWT (well_ordered_splitl y swo)).
+- exact/(well_orderedWT (well_ordered_splitr y swo)).
+rewrite (elements_split y) mem_cat if_arg 2!fun_if in_cons.
+by rewrite -[RHS]orbAC orbC; congr orb; case: (split y s).1.2.
+Qed.
+
+Lemma card_split x s : card s = (split x s).1.2 + card (split x s).1.1 + card (split x s).2.
+Proof.
+rewrite !cardE (elements_split x) size_cat if_arg fun_if/=.
+by rewrite -[RHS]addnAC addnC; congr addn; case: (split x s).1.2.
+Qed.
+
+Lemma elements_add x s : elements (add x s) = elements (split x s).1.1 ++ x :: elements (split x s).2.
+Proof.
+elim: s => [//|l IHl sx r IHr h]/=.
+case /comparable_ltgtP: (comparableT x sx) => _; last by rewrite elements_node.
+  rewrite elements_bal IHl; case: (split x l) => -[] ll lb lr/=.
+  by rewrite elements_join -catA cat_cons.
+rewrite elements_bal IHr; case: (split x r) => -[] rl rb rr/=.
+by rewrite elements_join -catA cat_cons.
 Qed.
 
 Lemma well_formed_remove x s : well_formed s -> well_formed (remove x s).
@@ -1430,9 +1559,9 @@ case /comparable_ltgtP: (comparableT x sx) => _.
 - exact/well_formed_merge.
 Qed.
 
-Lemma balanced_height_remove x s : well_formed s -> balanced s -> well_ordered s None None -> balanced (remove x s) && (height s <= (height (remove x s)).+1 <= (height s).+1).
+Lemma balanced_height_remove x s : well_formed s -> balanced s -> well_ordered s `]-oo, +oo[ -> balanced (remove x s) && (height s <= (height (remove x s)).+1 <= (height s).+1).
 Proof.
-elim: s => [//|] l IHl sx r IHr h/= /andP[]/andP[] /eqP -> {h} lwf rwf /andP[]/andP[] lrd lb rb /andP[] /well_orderedW lwo /well_orderedW rwo.
+elim: s => [//|] l IHl sx r IHr h/= /andP[]/andP[] /eqP -> {h} lwf rwf /andP[]/andP[] lrd lb rb /andP[] /well_orderedWT lwo /well_orderedWT rwo.
 move: IHl IHr => /(_ lwf lb lwo) /andP[] lb' /andP[] lxl xll /(_ rwf rb rwo) /andP[] rb' /andP[] rxr xrr.
 case /comparable_ltgtP: (comparableT x sx) => _; last first.
 - apply/andP; split; first exact/balanced_merge.
@@ -1463,60 +1592,67 @@ case /comparable_ltgtP: (comparableT x sx) => _; last first.
   by rewrite (maxn_idPr (ltnW xlr)) => bm ->; rewrite ltnS.
 Qed.
 
-Lemma well_ordered_remove x s lb ub : well_ordered s lb ub -> well_ordered (remove x s) lb ub.
+Lemma balanced_remove x s : well_formed s -> balanced s -> well_ordered s `]-oo, +oo[ -> balanced (remove x s).
 Proof.
-elim: s lb ub => [//|] l IHl sx r IHr h/= lb ub /andP[]/andP[]/andP[] lbsx sxub lwo rwo.
+by move=> swf sb swo; move: (balanced_height_remove x swf sb swo) => /andP[].
+Qed.
+
+Lemma well_ordered_remove x s itv : well_ordered s itv -> well_ordered (remove x s) itv.
+Proof.
+elim: s itv => [//|] l IHl sx r IHr h/= itv /andP[]/andP[] sxi lwo rwo.
 case /comparable_ltgtP: (comparableT x sx) => _.
-- rewrite well_ordered_bal lbsx/= sxub rwo/= andbT.
+- rewrite well_ordered_bal sxi rwo/= andbT.
   by apply/IHl.
-- rewrite well_ordered_bal lbsx/= sxub lwo/=.
+- rewrite well_ordered_bal sxi lwo/=.
   by apply/IHr.
-- apply/well_ordered_merge; last first.
-    refine (well_orderedWl _ rwo) => /=.
-    by case: lb {lwo lbsx} (ltoW lbsx).
-  refine (well_orderedWr _ lwo) => /=.
-  case: (min r) (mem_min (well_orderedW rwo)) => /= [m mr|_]; last first.
-    by case: ub {rwo} sxub => [|//] ub /ltW.
-  move: (well_ordered_lbP (well_orderedWr (ub':=None) erefl rwo) mr) => /= /ltW sxm.
-  case: ub {rwo} sxub => [|//] ub /= /ltW sxub.
-  by rewrite le_min sxm sxub.
+move: sxi; rewrite itv_boundlr => /andP[] isx sxi.
+apply/well_ordered_merge; last first.
+  apply/(well_orderedW _ rwo); rewrite subitvE/= lexx andbT.
+  by apply/(le_trans isx); rewrite bnd_simp.
+case: (min r) (mem_min (well_orderedWT rwo)) => /= [m|_]; last first.
+  apply/(well_orderedW _ lwo); rewrite subitvE lexx/=.
+  by apply/(le_trans _ sxi); rewrite bnd_simp.
+move=> /(mem_well_ordered rwo); rewrite itv_boundlr/= => /andP[sxm] _.
+by apply/(well_orderedW _ lwo); rewrite subitvE lexx/=; apply/ltW.
 Qed.
 
-Lemma mem_remove x y s : well_ordered s None None -> mem x (remove y s) = (x != y) && mem x s.
+Lemma elements_remove x s : elements (remove x s) = elements (split x s).1.1 ++ elements (split x s).2.
 Proof.
-elim: s => [/= _|l IHl sx r IHr h swo]; first exact/esym/andbF.
-rewrite mem_node//; move: swo => /= /andP[] /[dup] lwo /well_orderedW {}/IHl xl /[dup] rwo /well_orderedW {}/IHr xr.
-case /comparable_ltgtP: (comparableT y sx) => [ysx|sxy|sxy].
-- rewrite mem_bal; last first.
-    by rewrite well_ordered_bal/= rwo andbT; apply/well_ordered_remove.
-  rewrite !andb_orr; congr (_ || _ || _) => //; rewrite andbC; apply/esym/imply_andbl/implyP.
-    by move: ysx; rewrite lt_def => /andP[] sxy _ /eqP ->.
-  by move=> /(well_ordered_lbP rwo) /(lt_trans ysx); rewrite lt_def => /andP[].
-- rewrite mem_bal; last first.
-    by rewrite well_ordered_bal/= lwo; apply/well_ordered_remove.
-  rewrite !andb_orr; congr (_ || _ || _) => //; rewrite andbC; apply/esym/imply_andbl/implyP.
-    by move: sxy; rewrite lt_def eq_sym => /andP[] sxy _ /eqP ->.
-  move=> /(well_ordered_ubP lwo)/= xsx. 
-  by move: (lt_trans xsx sxy); rewrite lt_def eq_sym => /andP[].
-- subst y; have rwo' := well_orderedW rwo; rewrite mem_merge//; last first.
-    refine (well_orderedWr _ lwo) => /=.
-    case: (min r) (mem_min (well_orderedW rwo)) => [|//] m/= mr.
-    by move: (well_ordered_lbP rwo mr) => /= /ltW.
-  rewrite andbC 2!andb_orl andbN/=; congr orb; apply/esym/imply_andbl/implyP.
-    move=> /(well_ordered_ubP lwo)/=.
-    by rewrite lt_def eq_sym => /andP[].
-  move=> /(well_ordered_lbP rwo)/=.
-  by rewrite lt_def eq_sym => /andP[].
+elim: s => [//|] l IHl sx r IHr h/=.
+case /comparable_ltgtP: (comparableT x sx) => _.
+- rewrite elements_bal IHl; case: (split x l) => -[] ll lb lr/=.
+  by rewrite elements_join catA.
+- rewrite elements_bal IHr; case: (split x r) => -[] rl rb rr/=.
+  by rewrite elements_join -catA cat_cons.
+- by rewrite elements_merge.
 Qed.
 
-Lemma card_remove x s : well_ordered s None None -> card (remove x s) = card s - (mem x s).
+Lemma mem_remove x y s : well_ordered s `]-oo, +oo[ -> mem (remove y s) x = (x != y) && mem s x.
 Proof.
-elim: s => [//|] l IHl sx r IHr h/= /andP[] /well_orderedW lwo /well_orderedW rwo.
+move=> swo; rewrite !mem_elements//; last exact/well_ordered_remove.
+rewrite elements_remove [in RHS](elements_split y) !mem_cat.
+case/boolP: (_ \in _) => xl/=.
+  rewrite andbT; apply/esym/eqP => xy.
+  move: swo xl => /(well_ordered_splitl y) lwo.
+  rewrite -mem_elements; last exact/(well_orderedWT lwo).
+  by move=> /(mem_well_ordered lwo); rewrite xy in_itv/= ltxx.
+rewrite if_arg 2!fun_if in_cons.
+case/boolP: (_ \in _) => xr/=; last first.
+  by rewrite orbF -Bool.andb_lazy_alt andbCA andNb andbF.
+rewrite orbT if_same andbT; apply/esym/eqP => xy.
+move: swo xr => /(well_ordered_splitr y) rwo.
+rewrite -mem_elements; last exact/(well_orderedWT rwo).
+by move=> /(mem_well_ordered rwo); rewrite xy in_itv/= ltxx.
+Qed.
+
+Lemma card_remove x s : well_ordered s `]-oo, +oo[ -> card (remove x s) = card s - (mem s x).
+Proof.
+elim: s => [//|] l IHl sx r IHr h/= /andP[] /well_orderedWT lwo /well_orderedWT rwo.
 case /comparable_ltgtP: (comparableT x sx) => [xsx|sxx|->]/=.
 - rewrite card_bal IHl// -!addnS subDnCA; first by rewrite addnC.
-  by case: l {IHl lwo} => [//|] ll lx lr lh; case: (mem x _).
+  by case: l {IHl lwo} => [//|] ll lx lr lh; case: (mem _ _).
 - rewrite card_bal IHr// -!addSn [in RHS]addnC subDnCA//.
-  by case: r {IHr rwo} => [//|] rl rx rr rh; case: (mem x _).
+  by case: r {IHr rwo} => [//|] rl rx rr rh; case: (mem _ _).
 - by rewrite card_merge// subSS subn0.
 Qed.
 
@@ -1560,29 +1696,29 @@ apply/balanced_join.
 - exact/IHn.
 Qed.
 
-Lemma well_ordered_union_subdef n s t lb ub : well_ordered s lb ub -> well_ordered t lb ub -> well_ordered (union_subdef n s t) lb ub.
+Lemma well_ordered_union_subdef n s t itv : well_ordered s itv -> well_ordered t itv -> well_ordered (union_subdef n s t) itv.
 Proof.
-rewrite /union_subdef; elim: n s t lb ub => [//|] n IHn s t lb ub.
+rewrite /union_subdef; elim: n s t itv => [//|] n IHn s t itv.
 case: s => [//|] sl sx sr sh swo.
 case: t => [//|] tl tx tr th two.
 case: (th <= sh).
-  case: (th == 1); first by apply/well_ordered_add; move: two => //= /andP[]/andP[]/andP[].
+  case: (th == 1); first by apply/well_ordered_add; move: two => //= /andP[]/andP[].
   case: (split _ _)
-    (well_ordered_splitl sx (well_orderedWr (ub':=None) erefl two))
-    (well_ordered_splitr sx (well_orderedWl (lb':=None) erefl two))
+    (well_ordered_splitl sx (well_orderedWTr two))
+    (well_ordered_splitr sx (well_orderedWTl two))
     => [[stl /= _]] str stlwo strwo.
-  move: swo => /= /andP[]/andP[]/andP[] lbsx sxub slwo srwo.
+  move: swo => /= /andP[]/andP[] sxi slwo srwo.
   by apply/well_ordered_join => //; apply/IHn.
-case: (sh == 1); first by apply/well_ordered_add; move: swo => //= /andP[]/andP[]/andP[].
+case: (sh == 1); first by apply/well_ordered_add; move: swo => //= /andP[]/andP[].
 case: (split _ _)
-  (well_ordered_splitl tx (well_orderedWr (ub':=None) erefl swo))
-  (well_ordered_splitr tx (well_orderedWl (lb':=None) erefl swo))
+  (well_ordered_splitl tx (well_orderedWTr swo))
+  (well_ordered_splitr tx (well_orderedWTl swo))
   => [[ssl /= _]] ssr sslwo ssrwo.
-move: two => /= /andP[]/andP[]/andP[] lbtx txub tlwo trwo.
+move: two => /= /andP[]/andP[] txi tlwo trwo.
 by apply/well_ordered_join => //; apply/IHn.
 Qed.
 
-Lemma mem_union_subdef x n s t : well_formed s -> well_formed t -> balanced s -> balanced t -> well_ordered s None None -> well_ordered t None None -> (height s + height t <= n) -> mem x (union_subdef n s t) = (mem x s) || mem x t.
+Lemma mem_union_subdef x n s t : well_formed s -> well_formed t -> balanced s -> balanced t -> well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> (height s + height t <= n) -> mem (union_subdef n s t) x = (mem s x) || mem t x.
 Proof.
 rewrite /union_subdef; elim: n s t => [|n IHn] s t.
   by rewrite leqn0 addn_eq0 => /height0 -> /height0 -> _ _ _ _ /andP[] /eqP -> /eqP ->.
@@ -1607,13 +1743,13 @@ case: (th <= sh).
   rewrite IHn//; first last.
   + move: shE stn => /= ->; rewrite addSn ltnS; refine (leq_trans _).
     by apply/leq_add => //; apply/leq_maxl.
-  + exact (well_orderedW stlwo).
-  + exact (well_orderedW slwo).
+  + exact (well_orderedWT stlwo).
+  + exact (well_orderedWT slwo).
   rewrite IHn//; last first.
   + move: shE stn => /= ->; rewrite addSn ltnS; refine (leq_trans _).
     by apply/leq_add => //; apply/leq_maxr.
-  + exact (well_orderedW strwo).
-  + exact (well_orderedW srwo).
+  + exact (well_orderedWT strwo).
+  + exact (well_orderedWT srwo).
   rewrite -!orbA; apply/orb_id2l => /negPf ->; congr orb.
   rewrite andbF/= !orbA; congr orb.
   exact/orbC.
@@ -1634,13 +1770,13 @@ move: tb => /= /andP[]/andP[] _ tlb trb.
 rewrite IHn//; first last.
 + move: thE stn => /= ->; rewrite addnS ltnS; refine (leq_trans _).
   by apply/leq_add => //; apply/leq_maxl.
-+ exact (well_orderedW tlwo).
-+ exact (well_orderedW sslwo).
++ exact (well_orderedWT tlwo).
++ exact (well_orderedWT sslwo).
 rewrite IHn//; last first.
 + move: thE stn => /= ->; rewrite addnS ltnS; refine (leq_trans _).
   by apply/leq_add => //; apply/leq_maxr.
-+ exact (well_orderedW trwo).
-+ exact (well_orderedW ssrwo).
++ exact (well_orderedWT trwo).
++ exact (well_orderedWT ssrwo).
 rewrite -!orbA; apply/orb_id2l => /negPf ->.
 rewrite andbF/= orbC -orbA; congr orb.
 by rewrite orbA orbC orbA orbC orbA.
@@ -1652,10 +1788,10 @@ Proof. exact/well_formed_union_subdef. Qed.
 Lemma balanced_union s t : well_formed s -> well_formed t -> balanced s -> balanced t -> balanced (union s t).
 Proof. exact/balanced_union_subdef. Qed.
 
-Lemma well_ordered_union s t lb ub : well_ordered s lb ub -> well_ordered t lb ub -> well_ordered (union s t) lb ub.
+Lemma well_ordered_union s t itv : well_ordered s itv -> well_ordered t itv -> well_ordered (union s t) itv.
 Proof. exact/well_ordered_union_subdef. Qed.
 
-Lemma mem_union x s t : well_formed s -> well_formed t -> balanced s -> balanced t -> well_ordered s None None -> well_ordered t None None -> mem x (union s t) = (mem x s) || mem x t.
+Lemma mem_union x s t : well_formed s -> well_formed t -> balanced s -> balanced t -> well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> mem (union s t) x = (mem s x) || mem t x.
 Proof.
 move=> swf twf sb tb swo two.
 exact/mem_union_subdef.
@@ -1689,74 +1825,79 @@ apply/balanced_concat; try exact/well_formed_inter.
 exact/IHr.
 Qed.
 
-Lemma well_ordered_mem_inter x s t lb ub : well_ordered s lb ub -> well_ordered t lb ub -> well_ordered (inter s t) lb ub && (mem x (inter s t) == mem x s && mem x t).
+Lemma well_ordered_mem_inter x s t itv : well_ordered s itv -> well_ordered t itv -> well_ordered (inter s t) itv && (mem (inter s t) x == mem s x && mem t x).
 Proof.
-elim: s t lb ub => [//|] l IHl sx r IHr h t lb ub swo.
-rewrite mem_node ?(well_orderedW swo)//; move: swo => /= /andP[]/andP[]/andP[] lbsx sxub lwo rwo two.
-case: (split sx t) (well_ordered_splitl sx (well_orderedWr (ub':=None) erefl two)) (well_ordered_splitr sx (well_orderedWl (lb':=None) erefl two)) (mem_split x sx (well_orderedW two)) => [[tl /= +]] tr tlwo trwo.
+elim: s t itv => [//|] l IHl sx r IHr h t itv swo.
+rewrite mem_node ?(well_orderedWT swo)//; move: swo => /= /andP[]/andP[] sxi lwo rwo two.
+case: (split sx t) (well_ordered_splitl sx (well_orderedWTr two)) (well_ordered_splitr sx (well_orderedWTl two)) (mem_split x sx (well_orderedWT two)) => [[tl /= +]] tr tlwo trwo.
 case => /= xt.
-  move: IHl IHr => /(_ tl lb (Some sx) lwo tlwo) /andP[] ltlwo /eqP xltl
-    /(_ tr (Some sx) ub rwo trwo) /andP[] rtrwo /eqP xrtr.
+  move: IHl IHr => /(_ tl _ lwo tlwo) /andP[] ltlwo /eqP xltl
+    /(_ tr _ rwo trwo) /andP[] rtrwo /eqP xrtr.
   apply/andP; split; first exact/well_ordered_join.
   rewrite mem_join//; first last.
-  - exact/(well_orderedWr _ rtrwo).
-  - exact/(well_orderedWl _ ltlwo).
+  - exact/(well_orderedWTr rtrwo).
+  - exact/(well_orderedWTl ltlwo).
   apply/eqP; rewrite xltl xrtr xt -!orbA -orb_andr; congr orb.
   rewrite andb_orl !andb_orr !orbA; congr orb; rewrite -orbA -[LHS]orbF; congr orb.
   apply/esym/Bool.orb_false_intro; apply/negP => /andP[].
-    move=> /(well_ordered_ubP (well_orderedWl (lb':=None) erefl lwo))/= xsx.
-    move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl trwo))/= /(lt_trans xsx).
-    by rewrite ltxx.
-  move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl rwo))/= sxx.
-  move=> /(well_ordered_ubP (well_orderedWl (lb':=None) erefl tlwo))/= /(lt_trans sxx).
-  by rewrite ltxx.
-move: IHl IHr => /(_ tl lb (Some sx) lwo tlwo) /andP[] ltlwo /eqP xltl
-  /(_ tr (Some sx) ub rwo trwo) /andP[] rtrwo /eqP xrtr.
+    move=> /(mem_well_ordered lwo)/= + /(mem_well_ordered trwo)/=.
+    by rewrite !in_itv/= => /andP[_] xsx /andP[] /(lt_trans xsx); rewrite ltxx.
+  move=> /(mem_well_ordered rwo)/= + /(mem_well_ordered tlwo)/=.
+  by rewrite !in_itv/= => /andP[sxx] _ /andP[_] /(lt_trans sxx); rewrite ltxx.
+move: IHl IHr => /(_ tl _ lwo tlwo) /andP[] ltlwo /eqP xltl
+  /(_ tr _ rwo trwo) /andP[] rtrwo /eqP xrtr.
 have sxm: leo (Some sx) (min (inter r tr)).
-  case: (min _) (mem_min (well_orderedW rtrwo)) => /= [m|//].
-  by move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl rtrwo))/= /ltW.
+  case: (min _) (mem_min (well_orderedWT rtrwo)) => /= [m|//].
+  move=> /(mem_well_ordered rtrwo)/=.
+  by rewrite in_itv/= => /andP[]/ltW.
 apply/andP; split.
   apply/well_ordered_concat => //; last first.
-    apply/(well_orderedWl _ rtrwo) => /=.
-    by case: lb lbsx {lwo two tlwo ltlwo} => [|//] lb/= /ltW.
-  apply/(well_orderedWr _ ltlwo) => /=.
-  case: (min _) sxm => /= [m sxm|_]; last first.
-    by case: ub sxub {rwo two trwo rtrwo} => [|//] ub/= /ltW.
-  case: ub sxub {rwo two trwo rtrwo} => [|//] ub/= /ltW sxub.
-  by rewrite le_min sxm sxub.
+    apply/(well_orderedW _ rtrwo); rewrite subitvE/= lexx andbT.
+    by move: sxi; rewrite itv_boundlr => /andP[isx] _; apply/(le_trans isx); rewrite bnd_simp.
+  apply/(well_orderedW _ ltlwo); rewrite subitvE lexx/=.
+  case: (min _) sxm => /= [//|_].
+  by move: sxi; rewrite itv_boundlr => /andP[_] sxi; apply/(le_trans _ sxi); rewrite bnd_simp.
 rewrite mem_concat; first last.
-- exact/(well_orderedW rtrwo).
-- exact/(well_orderedWr _ (well_orderedWl _ ltlwo)).
+- exact/(well_orderedWT rtrwo).
+- apply/(well_orderedW _ ltlwo); rewrite subitvE/=.
+  by case: (min _) sxm.
 apply/eqP; rewrite xltl xrtr xt.
-case/boolP: (mem x l) => [xl|_]/=.
+case/boolP: (mem l x) => [xl|_]/=.
   rewrite orbT/= andbC; congr orb; apply/imply_andbl/implyP.
-  move: (well_ordered_ubP (well_orderedWl (lb':=None) erefl lwo) xl) => /= xsx.
-  move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl trwo))/= /(lt_trans xsx).
-  by rewrite ltxx.
-rewrite orbF; case/boolP: (mem x r) => [xr|_]/=.
+  move: (mem_well_ordered lwo xl) => /= + /(mem_well_ordered trwo)/=.
+  by rewrite !in_itv/= => /andP[_] sxx /andP[] /(lt_trans sxx); rewrite ltxx.
+rewrite orbF; case/boolP: (mem r x) => [xr|_]/=.
   rewrite orbT/= orbC; apply/esym/imply_orbl/implyP.
-  move: (well_ordered_lbP (well_orderedWr (ub':=None) erefl rwo) xr) => /= sxx.
-  move=> /(well_ordered_ubP (well_orderedWl (lb':=None) erefl tlwo))/= /(lt_trans sxx).
-  by rewrite ltxx.
+  move: (mem_well_ordered rwo xr) => /= + /(mem_well_ordered tlwo)/=.
+  by rewrite !in_itv/= => /andP[sxx] _ /andP[_] /(lt_trans sxx); rewrite ltxx.
 rewrite orbF; apply/esym/negP => /andP[] /eqP xsx /orP; case.
-  move=> /(well_ordered_ubP (well_orderedWl (lb':=None) erefl tlwo))/=.
-  by rewrite xsx ltxx.
-move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl trwo))/=.
-by rewrite xsx ltxx.
+  move=> /(mem_well_ordered tlwo)/=.
+  by rewrite in_itv/= xsx ltxx andbF.
+move=> /(mem_well_ordered trwo)/=.
+by rewrite in_itv/= xsx ltxx.
 Qed.
 
-Lemma well_ordered_inter s t lb ub : well_ordered s lb ub -> well_ordered t lb ub -> well_ordered (inter s t) lb ub.
+Lemma well_ordered_inter s t itv : well_ordered s itv -> well_ordered t itv -> well_ordered (inter s t) itv.
 Proof.
 by case: s => [//|] l x r h swo /(well_ordered_mem_inter x swo) => /andP[].
 Qed.
 
-Lemma mem_inter x s t : well_ordered s None None -> well_ordered t None None -> mem x (inter s t) = mem x s && mem x t.
+Lemma mem_inter x s t : well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> mem (inter s t) x = mem s x && mem t x.
 Proof. by move=> swo /(well_ordered_mem_inter x swo) => /andP[] _ /eqP. Qed.
 
 Lemma inters0 s : inter s (leaf elt) = (leaf elt).
 Proof. by elim: s => [//|l IHl x r IHr h]/=; rewrite IHl IHr. Qed.
 
-Lemma cardUI s t : well_formed s -> well_formed t -> card (union s t) + card (inter s t) = card s + card t.
+Lemma inters1 s x : inter s (singleton x) = if mem s x then singleton x else leaf elt.
+Proof.
+elim: s => [//|l IHl y r IHr h]/=.
+case /comparable_ltgtP: (comparableT x y) => /=; rewrite !inters0 /=.
+- by rewrite IHl => _; case: (mem _ _).
+- by rewrite IHr => _; case: (mem _ _).
+- by move=> ->.
+Qed.
+
+(*Lemma cardUI s t : well_formed s -> well_formed t -> card (union s t) + card (inter s t) = card s + card t.
 Proof.
 rewrite /union; move: {2 3}(height s + height t) (leqnn (height s + height t)) => n.
 elim: n s t => [s t + swf twf|n IHn s t].
@@ -1768,26 +1909,27 @@ case: (th <= sh).
     move: twf => /[swap] /eqP -> /=; rewrite eqSS eq_sym -leqn0 geq_max !leqn0.
     move=> /andP[]/andP[] /[swap] /height0 -> /[swap] /height0 -> /andP[] /eqP -> /eqP -> /=.
     rewrite -/(add tx (node sl sx sr sh)) card_add -addnA/=; congr (_ + _).
-    case /comparable_ltgtP: (comparableT sx tx) => //; rewrite !inters0 /=. 
+    by case /comparable_ltgtP: (comparableT sx tx) => // _; rewrite !inters0//= inters1; case: (mem _ _) => /=.
+    Search split.
+ *)
 
-
-Lemma split_bisP x s : well_ordered s None None ->
+Lemma split_bisP x s : well_ordered s `]-oo, +oo[ ->
   match split_bis x s with
-  | None => mem x s
+  | None => mem s x
   | Some (l, r) => (l == (split x s).1.1) && (r tt == (split x s).2) && ((split x s).1.2 == false)
   end.
 Proof.
 elim: s => [//|] l IHl sx r IHr h /= /andP[] lwo rwo.
 case /comparable_ltgtP: (comparableT x sx) => // [xsx|sxx].
-  case: (split_bis x l) (IHl (well_orderedW lwo)) => [|//] [sl sr]/= /andP[]/andP[] /eqP -> /eqP ->.
+  case: (split_bis x l) (IHl (well_orderedWT lwo)) => [|//] [sl sr]/= /andP[]/andP[] /eqP -> /eqP ->.
   case: (split x l) => [[]]/= ssl ssb ssr ->.
   by rewrite !eqxx.
-case: (split_bis x r) (IHr (well_orderedW rwo)) => [|//] [sl sr]/= /andP[]/andP[] /eqP -> /eqP ->.
+case: (split_bis x r) (IHr (well_orderedWT rwo)) => [|//] [sl sr]/= /andP[]/andP[] /eqP -> /eqP ->.
 case: (split x r) => [[]]/= ssl ssb ssr ->.
 by rewrite !eqxx.
 Qed.
 
-Lemma disjointP s t : well_ordered s None None -> well_ordered t None None -> reflect (forall x, ~~ (mem x s && mem x t)) (disjoint s t).
+Lemma disjointP s t : well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> reflect (forall x, ~~ (mem s x && mem t x)) (disjoint s t).
 Proof.
 elim: s t => [|l IHl sx r IHr h] t swo two; first exact/(iffP idP).
 rewrite [X in reflect _ X]/=.
@@ -1799,7 +1941,7 @@ case: (split_bis sx t) (split_bisP sx two) => [[tl tr] /andP[]/andP[] /eqP -> /e
 case: (split sx t) (well_ordered_splitl sx two) (well_ordered_splitr sx two) sxt (fun x => mem_split x sx two) => [[stl stb]] str stlwo strwo sxt.
 rewrite sxt [X in X -> _]/= => xt.
 apply/(iffP andP) => [[lstl rstr] x|xmem/=]; last first.
-  move: (swo) stlwo strwo => /= /andP[] /well_orderedW lwo /well_orderedW rwo /well_orderedW stlwo /well_orderedW strwo.
+  move: (swo) stlwo strwo => /= /andP[] /well_orderedWT lwo /well_orderedWT rwo /well_orderedWT stlwo /well_orderedWT strwo.
   split.
     apply/IHl => // x; apply/negP => /andP[] xl xstl.
     move: xmem => /(_ x).
@@ -1810,18 +1952,18 @@ apply/(iffP andP) => [[lstl rstr] x|xmem/=]; last first.
 rewrite mem_node// xt andbC.
 move: (swo) => /= /andP[] lwo rwo.
 apply/andP => -[]/orP; case=> [xstl|xstr].
-  move: lstl => /= /IHl-/(_ (well_orderedW lwo) (well_orderedW stlwo) x).
+  move: lstl => /= /IHl-/(_ (well_orderedWT lwo) (well_orderedWT stlwo) x).
   rewrite xstl andbT => /negPf ->; rewrite orbF.
-  move: (well_ordered_ubP stlwo xstl) => /= xsx.
-  move=> /orP; case=> [/eqP xsxE|/(well_ordered_lbP rwo)/(lt_trans xsx)].
+  move: (mem_well_ordered stlwo xstl); rewrite in_itv/= => xsx.
+  move=> /orP; case=> [/eqP xsxE|/(mem_well_ordered rwo)].
     by move: xsx; rewrite xsxE ltxx.
-  by rewrite ltxx.
-move: rstr => /= /IHr-/(_ (well_orderedW rwo) (well_orderedW strwo) x).
+  by rewrite in_itv/= andbT => /(lt_trans xsx); rewrite ltxx.
+move: rstr => /= /IHr-/(_ (well_orderedWT rwo) (well_orderedWT strwo) x).
 rewrite xstr andbT => /negPf ->; rewrite orbF.
-move: (well_ordered_lbP strwo xstr) => /= sxx.
-move=> /orP; case=> [/eqP xsx|/(well_ordered_ubP lwo)/(lt_trans sxx)].
+move: (mem_well_ordered strwo xstr); rewrite in_itv/= andbT => sxx.
+move=> /orP; case=> [/eqP xsx|/(mem_well_ordered lwo)].
   by move: sxx; rewrite xsx ltxx.
-by rewrite ltxx.
+by rewrite in_itv/= => /(lt_trans sxx); rewrite ltxx.
 Qed.
 
 Lemma well_formed_diff s t : well_formed s -> well_formed t -> well_formed (diff s t).
@@ -1859,76 +2001,83 @@ apply/balanced_join; try exact/well_formed_diff.
 exact/IHr.
 Qed.
 
-Lemma well_ordered_mem_diff x s t lb ub : well_ordered s lb ub -> well_ordered t lb ub -> well_ordered (diff s t) lb ub && (mem x (diff s t) == mem x s && ~~ mem x t).
+Lemma well_ordered_mem_diff x s t itv : well_ordered s itv -> well_ordered t itv -> well_ordered (diff s t) itv && (mem (diff s t) x == mem s x && ~~ mem t x).
 Proof.
-elim: s t lb ub => [//|] l IHl sx r IHr h t lb ub swo.
-rewrite mem_node ?(well_orderedW swo)//.
+elim: s t itv => [//|] l IHl sx r IHr h t itv swo.
+rewrite mem_node ?(well_orderedWT swo)//.
 case: t => [//|tl tx tr th] two.
-  by rewrite /diff swo mem_node ?(well_orderedW swo)// andbT/=.
+  by rewrite /diff swo mem_node ?(well_orderedWT swo)// andbT/=.
 rewrite [diff _ _]/= -/(split sx (node tl tx tr th)).
-move: (node tl tx tr th) two swo => t two/= /andP[]/andP[]/andP[] lbsx sxub lwo rwo.
-case: (split sx t) (well_ordered_splitl sx (well_orderedWr (ub':=None) erefl two)) (well_ordered_splitr sx (well_orderedWl (lb':=None) erefl two)) (mem_split x sx (well_orderedW two)) => [[stl /= +]] str stlwo strwo.
+move: (node tl tx tr th) two swo => t two/= /andP[]/andP[] sxi lwo rwo.
+case: (split sx t) (well_ordered_splitl sx (well_orderedWTr two)) (well_ordered_splitr sx (well_orderedWTl two)) (mem_split x sx (well_orderedWT two)) => [[stl /= +]] str stlwo strwo.
 case => /= xt; last first.
-  move: IHl IHr => /(_ stl lb (Some sx) lwo stlwo) /andP[] ltlwo /eqP xltl
-    /(_ str (Some sx) ub rwo strwo) /andP[] rtrwo /eqP xrtr.
+  move: IHl IHr => /(_ stl _ lwo stlwo) /andP[] ltlwo /eqP xltl
+    /(_ str _ rwo strwo) /andP[] rtrwo /eqP xrtr.
   apply/andP; split; first exact/well_ordered_join.
   rewrite mem_join//; first last.
-  - exact/(well_orderedWr _ rtrwo).
-  - exact/(well_orderedWl _ ltlwo).
+  - exact/(well_orderedWTr rtrwo).
+  - exact/(well_orderedWTl ltlwo).
   apply/eqP; rewrite xltl xrtr xt. 
-  case/boolP: (mem x stl) => [/(well_ordered_ubP (well_orderedWl (lb':=None) erefl stlwo))/=|_].
+  case/boolP: (mem stl x) => [/(mem_well_ordered stlwo)/=|_].
+    rewrite in_itv/= => /andP[_].
     have [->|_] := eqVneq x sx; first by rewrite ltxx.
-    case/boolP: (mem x r) => [/(well_ordered_lbP (well_orderedWr (ub':=None) erefl rwo))/= sxx /(lt_trans sxx)|_].
-      by rewrite ltxx.
-    case/boolP: (mem x str) => [/(well_ordered_lbP (well_orderedWr (ub':=None) erefl strwo))/= sxx /(lt_trans sxx)|_ _].
-      by rewrite ltxx.
+    case/boolP: (mem r x) => [/(mem_well_ordered rwo)/=|_].
+      by rewrite in_itv/= => /andP[sxx] _ /(lt_trans sxx); rewrite ltxx.
+    case/boolP: (mem str x) => [/(mem_well_ordered strwo)/=|_ _].
+      by rewrite in_itv/= => /andP[xsx] _ /(lt_trans xsx); rewrite ltxx.
     by rewrite /= !orbF.
-  case/boolP: (mem x str) => [/(well_ordered_lbP (well_orderedWr (ub':=None) erefl strwo))/=|_]; last by rewrite !andbT.
+  case/boolP: (mem str x) => [/(mem_well_ordered strwo)/=|_]; last by rewrite !andbT.
+  rewrite in_itv/= => /andP[+] _.
   have [->|_] := eqVneq x sx; first by rewrite ltxx.
-  case/boolP: (mem x l) => [/(well_ordered_ubP (well_orderedWl (lb':=None) erefl lwo))/= xsx /(lt_trans xsx)|//].
-  by rewrite ltxx.
-move: IHl IHr => /(_ stl lb (Some sx) lwo stlwo) /andP[] ltlwo /eqP xltl
-  /(_ str (Some sx) ub rwo strwo) /andP[] rtrwo /eqP xrtr.
+  case/boolP: (mem l x) => [/(mem_well_ordered lwo)/=|//].
+  by rewrite in_itv/= => /andP[_] xsx /(lt_trans xsx); rewrite ltxx.
+move: IHl IHr => /(_ stl _ lwo stlwo) /andP[] ltlwo /eqP xltl
+  /(_ str _ rwo strwo) /andP[] rtrwo /eqP xrtr.
 have sxm: leo (Some sx) (min (diff r str)).
-  case: (min _) (mem_min (well_orderedW rtrwo)) => /= [m|//].
-  by move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl rtrwo))/= /ltW.
+  case: (min _) (mem_min (well_orderedWT rtrwo)) => /= [m|//].
+  move=> /(mem_well_ordered rtrwo)/=.
+  by rewrite in_itv/= => /andP[]/ltW.
 apply/andP; split.
   apply/well_ordered_concat => //; last first.
-    apply/(well_orderedWl _ rtrwo) => /=.
-    by case: lb lbsx {lwo two stlwo ltlwo} => [|//] lb/= /ltW.
-  apply/(well_orderedWr _ ltlwo) => /=.
-  case: (min _) sxm => /= [m sxm|_]; last first.
-    by case: ub sxub {rwo two strwo rtrwo} => [|//] ub/= /ltW.
-  case: ub sxub {rwo two strwo rtrwo} => [|//] ub/= /ltW sxub.
-  by rewrite le_min sxm sxub.
+    apply/(well_orderedWl _ rtrwo).
+    by move: sxi; rewrite itv_boundlr => /andP[isx] _; apply/(le_trans isx); rewrite bnd_simp.
+  (* N.B. Coq instanciates `itv` too early to use `well_orderedWr`. *)
+  apply/(well_orderedW _ ltlwo); rewrite subitvE lexx/=.
+  case: (min _) sxm => /= [//|_].
+  by move: sxi; rewrite itv_boundlr => /andP[_] sxi; apply/(le_trans _ sxi); rewrite bnd_simp.
 rewrite mem_concat; first last.
-- exact/(well_orderedW rtrwo).
-- exact/(well_orderedWr _ (well_orderedWl _ ltlwo)).
+- exact/(well_orderedWT rtrwo).
+  (* N.B. Coq instanciates `itv` too early to use `well_orderedWr`. *)
+- apply/(well_orderedW _ ltlwo); rewrite subitvE/=.
+  by case: (min _) sxm.
 apply/eqP; rewrite xltl xrtr xt.
-move: lwo rwo => /(well_orderedWl (lb':=None) erefl)/well_ordered_ubP lwo /(well_orderedWr (ub':=None) erefl)/well_ordered_lbP rwo.
+move: lwo rwo => /well_orderedWTl/mem_well_ordered lwo /well_orderedWTr/mem_well_ordered rwo.
 have [->|_]/= := eqVneq x sx.
   apply/negP => /orP; case=> /andP[].
-    by move=> /lwo => /=; rewrite ltxx.
-  by move=> /rwo => /=; rewrite ltxx.
-case/boolP: (mem x l) => [/lwo/= xsx|_].
-  case/boolP: (mem x r) => [/rwo /(lt_trans xsx)|_]/=; first by rewrite ltxx.
-  case/boolP: (mem x str) => [/(well_ordered_lbP (well_orderedWr (ub':=None) erefl strwo))/(lt_trans xsx)|_]/=.
-    by rewrite ltxx.
+    by move=> /lwo; rewrite in_itv/= ltxx.
+  by move=> /rwo; rewrite in_itv/= ltxx.
+case/boolP: (mem l x) => [/lwo/=|_].
+  rewrite in_itv/= => xsx.
+  case/boolP: (mem r x) => [/rwo|_]/=.
+    by rewrite in_itv/= andbT => /(lt_trans xsx); rewrite ltxx.
+  case/boolP: (mem str x) => [/(mem_well_ordered strwo)|_]/=.
+    by rewrite in_itv/= => /andP[] /(lt_trans xsx); rewrite ltxx.
   by rewrite !orbF.
-case/boolP: (mem x r) => [/rwo/= sxx|//].
-  case/boolP: (mem x stl) => [/(well_ordered_ubP (well_orderedWl (lb':=None) erefl stlwo))/(lt_trans sxx)|//]/=.
-  by rewrite ltxx.
+case/boolP: (mem r x) => [/rwo/=|//].
+rewrite in_itv/= andbT => sxx.
+case/boolP: (mem stl x) => [/(mem_well_ordered stlwo)|//]/=.
+by rewrite in_itv/= => /andP[_] /(lt_trans sxx); rewrite ltxx.
 Qed.
 
-Lemma well_ordered_diff s t lb ub : well_ordered s lb ub -> well_ordered t lb ub -> well_ordered (diff s t) lb ub.
+Lemma well_ordered_diff s t itv : well_ordered s itv -> well_ordered t itv -> well_ordered (diff s t) itv.
 Proof.
 by case: s => [//|] l x r h swo /(well_ordered_mem_diff x swo) => /andP[].
 Qed.
 
-Lemma mem_diff x s t : well_ordered s None None -> well_ordered t None None -> mem x (diff s t) = mem x s && ~~ mem x t.
+Lemma mem_diff x s t : well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> mem (diff s t) x = mem s x && ~~ mem t x.
 Proof. by move=> swo /(well_ordered_mem_diff x swo) => /andP[] _ /eqP. Qed.
 
-Lemma subset_subdefP n s t : well_formed s -> well_formed t -> well_ordered s None None -> well_ordered t None None -> height s + height t <= n -> reflect (forall x, mem x s -> mem x t) (subset_subdef n s t).
+Lemma subset_subdefP n s t : well_formed s -> well_formed t -> well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> height s + height t <= n -> reflect (forall x, mem s x -> mem t x) (subset_subdef n s t).
 Proof.
 pose f := fix F s := match s with | leaf => 0 | node l _ r _ => (maxn (F l) (F r)).+1 end.
 have fE : forall s, well_formed s -> height s = f s.
@@ -1944,9 +2093,9 @@ case: s => [|sl sx sr sh] swo.
 case: t => [|tl tx tr th] two hn.
   by apply/(iffP idP) => // /(_ sx)/=; apply; rewrite eqxx.
 rewrite [X in reflect _ X]/=.
-move: (swo); rewrite [well_ordered _ _ _]/= => /andP[] /[dup] slwo /well_orderedW slwo' /[dup] srwo /well_orderedW srwo'.
-move: (two); rewrite [well_ordered _ _ _]/= => /andP[] /[dup] tlwo /well_orderedW tlwo' /[dup] trwo /well_orderedW trwo'.
-have sl0wo : well_ordered (node sl sx (leaf elt) 0) None None
+move: (swo); rewrite [well_ordered _ _]/= => /andP[] /[dup] slwo /well_orderedWT slwo' /[dup] srwo /well_orderedWT srwo'.
+move: (two); rewrite [well_ordered _ _]/= => /andP[] /[dup] tlwo /well_orderedWT tlwo' /[dup] trwo /well_orderedWT trwo'.
+have sl0wo : well_ordered (node sl sx (leaf elt) 0) `]-oo, +oo[.
   by rewrite /= andbT.
 have sl0tln : f (node sl sx (leaf elt) 0) + f tl <= n.
   by move: hn => /=; rewrite addnS ltnS maxn0; refine (leq_trans _); apply/leq_add; [rewrite ltnS|]; apply/leq_maxl.
@@ -1968,11 +2117,13 @@ case /comparable_ltgtP: (comparableT sx tx) => sxtx; (apply/(iffP andP) => [[]|]
     by move=> xr; move: (IH x); rewrite mem_node// mem_node// xr orbT; apply.
   rewrite orbF => xs; move: (IH x); rewrite mem_node// mem_node// xs/= => /(_ erefl).
   have xtx: (x < tx)%O.
-    move/orP: xs; case => [/eqP -> //|/(well_ordered_ubP slwo)/= xsx].
+    move/orP: xs; case => [/eqP -> //|/(mem_well_ordered slwo)/=].
+    rewrite in_itv/= => xsx.
     exact/(lt_trans xsx sxtx).
   move=> /orP; case=> [/orP|]; [case=> [/eqP xtxE|//]|].
     by move: xtx; rewrite xtxE ltxx.
-  by move=> /(well_ordered_lbP trwo)/= /(lt_trans xtx); rewrite ltxx.
+  move=> /(mem_well_ordered trwo)/=; rewrite in_itv/= andbT.
+  by move=> /(lt_trans xtx); rewrite ltxx.
 - move=> /IHn-/(_ slwo' two sltn) IHl /IHn-/(_ srwo trwo' sr0trn) IHr x.
   move: (IHl x) (IHr x); rewrite mem_node// mem_node// mem_node//= orbF => {}IHl {}IHr.
   by rewrite orbAC => /orP; case=> [/IHr|/IHl] -> //; rewrite orbT.
@@ -1980,35 +2131,40 @@ case /comparable_ltgtP: (comparableT sx tx) => sxtx; (apply/(iffP andP) => [[]|]
     by move=> xl; move: (IH x); rewrite mem_node// mem_node// xl orbT; apply.
   rewrite orbF => xs; move: (IH x); rewrite mem_node// mem_node// orbAC xs/= => /(_ erefl) /orP.
   have txx: (tx < x)%O.
-    move/orP: xs; case => [/eqP -> //|/(well_ordered_lbP srwo)/= sxx].
-    exact/(lt_trans sxtx sxx).
+    move/orP: xs; case => [/eqP -> //|/(mem_well_ordered srwo)/=].
+    by rewrite in_itv/= andbT; apply/(lt_trans sxtx).
   case=> // /orP; case=> [/eqP xtxE|//].
     by move: txx; rewrite xtxE ltxx.
-  by move=> /(well_ordered_ubP tlwo)/= /(lt_trans txx); rewrite ltxx.
+  move=> /(mem_well_ordered tlwo)/=.
+  by rewrite in_itv/= => /(lt_trans txx); rewrite ltxx.
 - move=> /IHn-/(_ slwo' tlwo' sltln) IHl /IHn-/(_ srwo' trwo' srtrn) IHr x.
   move: (IHl x) (IHr x); rewrite mem_node// mem_node// => {}IHl {}IHr.
   by rewrite sxtx => /orP; case=> [/orP|/IHr ->]; [case=> [-> //| /IHl ->]|]; rewrite orbT.
 - subst tx.
   move=> IH; split; apply/IHn => // x.
-    move=> /[dup] /(well_ordered_ubP slwo)/= xsx xl; move: (IH x); rewrite mem_node// mem_node// xl orbT => /(_ erefl)/orP.
+    move=> /[dup] /(mem_well_ordered slwo)/=.
+    rewrite in_itv/= => xsx xl; move: (IH x); rewrite mem_node// mem_node// xl orbT => /(_ erefl)/orP.
     case=> [/orP|]; [case=> [/eqP xsxE|//]|].
       by move: xsx; rewrite xsxE ltxx.
-    by move=> /(well_ordered_lbP trwo)/= /(lt_trans xsx); rewrite ltxx.
-  move=> /[dup] /(well_ordered_lbP srwo)/= sxx xr; move: (IH x); rewrite mem_node// mem_node// xr orbT => /(_ erefl)/orP.
+    move=> /(mem_well_ordered trwo)/=.
+    by rewrite in_itv/= andbT => /(lt_trans xsx); rewrite ltxx.
+  move=> /[dup] /(mem_well_ordered srwo)/=.
+  rewrite in_itv/= andbT => sxx xr; move: (IH x); rewrite mem_node// mem_node// xr orbT => /(_ erefl)/orP.
   case=> [/orP|//]; case=> [/eqP xsxE|].
     by move: sxx; rewrite xsxE ltxx.
-  by move=> /(well_ordered_ubP tlwo)/= /(lt_trans sxx); rewrite ltxx.
+  move=> /(mem_well_ordered tlwo)/=.
+  by rewrite in_itv/= => /(lt_trans sxx); rewrite ltxx.
 Qed.
 
-Lemma subsetP s t : well_formed s -> well_formed t -> well_ordered s None None -> well_ordered t None None -> reflect (forall x, mem x s -> mem x t) (subset s t).
+Lemma subsetP s t : well_formed s -> well_formed t -> well_ordered s `]-oo, +oo[ -> well_ordered t `]-oo, +oo[ -> reflect (forall x, mem s x -> mem t x) (subset s t).
 Proof. by move=> swf twf swo two; apply/subset_subdefP. Qed.
 
-Lemma allP (p : pred elt) s : well_ordered s None None -> reflect (forall x, mem x s -> p x) (all p s).
+Lemma allP (p : pred elt) s : well_ordered s `]-oo, +oo[ -> reflect (forall x, mem s x -> p x) (all p s).
 Proof.
 elim: s => [|l IHl x r IHr h] swo; apply/(iffP idP) => // [|mP/=];
   move: (swo) => /= /andP[]
-    /well_orderedW {}/IHl IHl
-    /well_orderedW {}/IHr IHr.
+    /well_orderedWT {}/IHl IHl
+    /well_orderedWT {}/IHr IHr.
   move=> /andP[]/andP[] px {}/IHl lP {}/IHr rP y.
   by case /comparable_ltgtP: (comparableT x y) => /= [_|_|<-]//;
     [apply/rP|apply/lP].
@@ -2018,11 +2174,11 @@ apply/andP; split; [apply/andP; split|].
 - by apply /IHr => y yr; apply/mP; rewrite mem_node// yr !orbT.
 Qed.
 
-Lemma hasP (p : pred elt) s : well_ordered s None None -> reflect (exists x, mem x s && p x) (has p s).
+Lemma hasP (p : pred elt) s : well_ordered s `]-oo, +oo[ -> reflect (exists x, mem s x && p x) (has p s).
 Proof.
 elim: s => [|l IHl x r IHr h] swo; apply/(iffP idP) => [//|[]// y];
-  move: (swo); rewrite [has _ _]/= [well_ordered _ _ _]/= => /andP[]
-    /well_orderedW lwo /well_orderedW rwo.
+  move: (swo); rewrite [has _ _]/= [well_ordered _ _]/= => /andP[]
+    /well_orderedWT lwo /well_orderedWT rwo.
   move=> /orP; case=>[/orP|/(IHr rwo) [y /andP[] yr py]]; [case=> [px|/(IHl lwo) [y /andP[] yl py]]|].
   - by exists x; rewrite /= eqxx.
   - by exists y; rewrite mem_node// yl orbT.
@@ -2031,6 +2187,37 @@ rewrite mem_node// => /andP[] /orP + py; case=> [/orP|yr]; [case=> [/eqP <-|yl]|
 - by rewrite py.
 - by apply/orP; left; apply/orP; right; apply/(IHl lwo); exists y; rewrite yl.
 - by apply/orP; right; apply/(IHr rwo); exists y; rewrite yr.
+Qed.
+
+Lemma well_formed_filter p s : well_formed s -> well_formed (filter p s).
+Proof.
+elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[_] /IHl lwf /IHr rwf.
+case: (p x).
+  exact/well_formed_join.
+exact/well_formed_concat.
+Qed.
+
+Lemma balanced_filter p s : well_formed s -> balanced s -> balanced (filter p s).
+Proof.
+elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[_] lwf rwf /andP[]/andP[_] /(IHl lwf) lb /(IHr rwf) rb.
+case: (p x).
+  by apply/balanced_join => //; apply/well_formed_filter.
+by apply/balanced_concat => //; apply/well_formed_filter.
+Qed.
+
+Lemma well_ordered_filter p s itv : well_ordered s itv -> well_ordered (filter p s) itv.
+Proof.
+elim: s itv => [//|l IHl x r IHr h]/= itv /andP[]/andP[] xi /IHl lwo /IHr rwo.
+case: (p x); first exact/well_ordered_join. 
+move: xi; rewrite itv_boundlr => /andP[] ix xi.
+apply/well_ordered_concat; last first.
+  apply/(well_orderedW _ rwo); rewrite subitvE/= lexx andbT.
+  exact/(le_trans ix)/lexx.
+apply/(well_orderedW _ lwo); rewrite subitvE lexx/=.
+case: (min _) (mem_min (well_orderedWT rwo)) => [y|_]/=.
+  move=> /(mem_well_ordered rwo).
+  by rewrite in_itv/= => /andP[]/ltW.
+exact/(le_trans _ xi)/lexx.
 Qed.
 
 Lemma well_formed_partition p s : well_formed s -> well_formed (partition p s).1 && well_formed (partition p s).2.
@@ -2057,961 +2244,257 @@ case: (p x) => /=; apply/andP; split.
 - exact/balanced_join.
 Qed.
 
-Lemma well_ordered_partition p s lb ub : well_ordered s lb ub -> well_ordered (partition p s).1 lb ub && well_ordered (partition p s).2 lb ub.
+Lemma well_ordered_partition p s itv : well_ordered s itv -> well_ordered (partition p s).1 itv && well_ordered (partition p s).2 itv.
 Proof.
-elim: s lb ub => [//|] l IHl x r IHr h lb ub/= /andP[]/andP[]/andP[] lbx xub {}/IHl + {}/IHr.
+elim: s itv => [//|] l IHl x r IHr h itv/= /andP[]/andP[] xi' {}/IHl + {}/IHr.
+move: (xi'); rewrite itv_boundlr => /andP[ix] xi.
 move: (partition p l) => [pll plr]/= /andP[] pllwo plrwo.
 move: (partition p r) => [prl prr]/= /andP[] prlwo prrwo.
 case: (p x) => /=; apply/andP; split.
 - exact/well_ordered_join.
 - apply/well_ordered_concat; last first.
-    apply/(well_orderedWl _ prrwo).
-    by case: lb lbx {pllwo plrwo} => [|//] lb/= /ltW.
-  move: (min prr) (mem_min (well_orderedW prrwo)) => [m|_]/=; last first.
-    apply/(well_orderedWr _ plrwo).
-    by case: ub xub {prlwo prrwo} => [|//] rb/= /ltW.
-  move=> /[dup] /(well_ordered_ubP (well_orderedWl (lb':=None) erefl prrwo)) + /(well_ordered_lbP (well_orderedWr (ub':=None) erefl prrwo)) /ltoW xm.
-  by case: ub xub {prlwo prrwo} => [ub xub /ltW mub|_ _]/=; [rewrite (min_idPl mub)|]; apply/(well_orderedWr _ plrwo).
+    by apply/(well_orderedWl _ prrwo)/(le_trans ix); rewrite bnd_simp.
+  move: (min prr) (mem_min (well_orderedWT prrwo)) => [m|_]/=; last first.
+  (* N.B. Coq instanciates `itv` too early to use `well_orderedWr`. *)
+    apply/(well_orderedW _ plrwo); rewrite subitvE lexx/=.
+    by apply/(le_trans _ xi); rewrite bnd_simp.
+  move=> /[dup] /(mem_well_ordered (well_orderedWTl prrwo)) + /(mem_well_ordered (well_orderedWTr prrwo))/=.
+  rewrite itv_boundlr/= in_itv/= andbT => mi xm.
+  (* N.B. Coq instanciates `itv` too early to use `well_orderedWr`. *)
+  apply/(well_orderedW _ plrwo); rewrite subitvE lexx/=.
+  exact/ltW.
 - apply/well_ordered_concat; last first.
-    apply/(well_orderedWl _ prlwo).
-    by case: lb lbx {pllwo plrwo} => [|//] lb/= /ltW.
-  move: (min prl) (mem_min (well_orderedW prlwo)) => [m|_]/=; last first.
-    apply/(well_orderedWr _ pllwo).
-    by case: ub xub {prlwo prrwo} => [|//] rb/= /ltW.
-  move=> /[dup] /(well_ordered_ubP (well_orderedWl (lb':=None) erefl prlwo)) + /(well_ordered_lbP (well_orderedWr (ub':=None) erefl prlwo)) /ltoW xm.
-  by case: ub xub {prrwo prlwo} => [ub xub /ltW mub|_ _]/=; [rewrite (min_idPl mub)|]; apply/(well_orderedWr _ pllwo).
+    exact/(well_orderedWl _ prlwo)/(le_trans ix)/lexx.
+  move: (min prl) (mem_min (well_orderedWT prlwo)) => [m|_]/=; last first.
+    apply/(well_orderedW _ pllwo); rewrite subitvE lexx/=.
+    exact/(le_trans _ xi)/lexx.
+  move=> /(mem_well_ordered (well_orderedWTr prlwo)).
+  rewrite itv_boundlr/= => /andP[] /ltW xm _.
+  by apply/(well_orderedW _ pllwo); rewrite subitvE lexx/=.
 - exact/well_ordered_join.
 Qed.
 
-Lemma mem_partition x p s : well_ordered s None None -> (mem x (partition p s).1 == p x && mem x s) && (mem x (partition p s).2 == ~~ p x && mem x s).
+Lemma mem_partition x p s : well_ordered s `]-oo, +oo[ -> (mem (partition p s).1 x == p x && mem s x) && (mem (partition p s).2 x == ~~ p x && mem s x).
 Proof.
 elim: s => [|l IHl sx r IHr h swo].
   by rewrite !andbF.
 rewrite mem_node//; move: (swo) => /= /andP[] lwo rwo.
-move: (partition p l) (well_ordered_partition p lwo) {IHl} (IHl (well_orderedW lwo)) => [pll plr]/= /andP[] pllwo plrwo /andP[] /eqP xpll /eqP xplr.
-move: (partition p r) (well_ordered_partition p rwo) {IHr} (IHr (well_orderedW rwo)) => [prl prr]/= /andP[] prlwo prrwo /andP[] /eqP xprl /eqP xprr.
+move: (partition p l) (well_ordered_partition p lwo) {IHl} (IHl (well_orderedWT lwo)) => [pll plr]/= /andP[] pllwo plrwo /andP[] /eqP xpll /eqP xplr.
+move: (partition p r) (well_ordered_partition p rwo) {IHr} (IHr (well_orderedWT rwo)) => [prl prr]/= /andP[] prlwo prrwo /andP[] /eqP xprl /eqP xprr.
 case/boolP: (p sx) => [|/negPf] /= psx; apply/andP; split; apply/eqP.
 - by rewrite mem_join// xpll xprl 2!andb_orr andb_eq psx.
 - rewrite mem_concat.
   + by rewrite xplr xprr 2!andb_orr (andb_eq (fun x => ~~ p x)) psx.
-  + move: (min prr) (mem_min (well_orderedW prrwo)) => [m|_]/=; last first.
-      exact/(well_orderedW plrwo).
-    move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl prrwo)) /ltoW xm.
-    exact/(well_orderedWr _ plrwo).
-  + exact/(well_orderedW prrwo).
+  + move: (min prr) (mem_min (well_orderedWT prrwo)) => [m|_]/=; last first.
+      exact/(well_orderedWT plrwo).
+    move=> /(mem_well_ordered (well_orderedWTr prrwo))/=.
+    rewrite itv_boundlr/= => /andP[] /ltW sxm _.
+    by apply/(well_orderedW _ plrwo); rewrite subitvE/=.
+  + exact/(well_orderedWT prrwo).
 - rewrite mem_concat.
   + by rewrite xpll xprl 2!andb_orr andb_eq psx.
-  + move: (min prl) (mem_min (well_orderedW prlwo)) => [m|_]/=; last first.
-      exact/(well_orderedW pllwo).
-    move=> /(well_ordered_lbP (well_orderedWr (ub':=None) erefl prlwo)) /ltoW xm.
-    exact/(well_orderedWr _ pllwo).
-  + exact/(well_orderedW prlwo).
+  + move: (min prl) (mem_min (well_orderedWT prlwo)) => [m|_]/=; last first.
+      exact/(well_orderedWT pllwo).
+    move=> /(mem_well_ordered (well_orderedWTr prlwo))/=.
+    rewrite itv_boundlr/= => /andP[] /ltW sxm _.
+    by apply/(well_orderedW _ pllwo); rewrite subitvE/=.
+  + exact/(well_orderedWT prlwo).
 - by rewrite mem_join// xplr xprr 2!andb_orr (andb_eq (fun x => ~~ p x)) psx.
 Qed.
 
+Lemma well_formed_try_join l x r : well_formed l -> well_formed r -> well_formed (try_join l x r).
+Proof.
+move=> lwf rwf.
+rewrite /try_join; case: (_ && _).
+  exact/well_formed_join.
+apply/well_formed_union => //.
+exact/well_formed_add.
+Qed.
 
+Lemma balanced_try_join l x r : well_formed l -> well_formed r -> balanced l -> balanced r -> balanced (try_join l x r).
+Proof.
+move=> lwf rwf lb rb.
+rewrite /try_join; case: (_ && _).
+  exact/balanced_join.
+apply/balanced_union => //.
+  exact/well_formed_add.
+exact/balanced_add.
+Qed.
 
+Lemma well_ordered_try_join l x r itv : x \in itv -> well_ordered l itv -> well_ordered r itv -> well_ordered (try_join l x r) itv.
+Proof.
+move=> xi lwo rwo.
+rewrite /try_join; case/boolP: (_ && _) => [|_]; last first.
+  by apply/well_ordered_union => //; apply/well_ordered_add.
+move=> /andP[] xl xr.
+apply/well_ordered_join => //.
+  move: lwo; rewrite well_orderedP => /andP[] lwo /(allP _ lwo) li.
+  rewrite well_orderedP; apply/andP; split=> //.
+  apply/allP => //= y /[dup] /(maxP lwo) + /li.
+  rewrite !itv_boundlr/= => + /andP[->] _ /=.
+  move: xl; case: (max l) => [ml|//]/= mlx yml.
+  by apply/(le_lt_trans yml).
+move: rwo; rewrite well_orderedP => /andP[] rwo /(allP _ rwo) ri.
+rewrite well_orderedP; apply/andP; split=> //.
+apply/allP => //= y /[dup] /(minP rwo) + /ri.
+rewrite !itv_boundlr/= => + /andP[_] -> /=.
+move: xr; case: (min r) => [mr|//]/= xmr mry.
+by rewrite andbT; apply/(lt_le_trans xmr).
+Qed.
 
+Lemma mem_try_join y l x r : well_formed l -> well_formed r -> balanced l -> balanced r -> well_ordered l `]-oo, +oo[ -> well_ordered r `]-oo, +oo[ ->
+  mem (try_join l x r) y = (y == x) || mem l y || mem r y.
+Proof.
+move=> lwf rwf lb rb lwo rwo; rewrite /try_join; case: ifP => [|_]; last first.
+  rewrite mem_union//.
+  - by rewrite mem_add// orbCA orbA.
+  - exact/well_formed_add.
+  - exact/balanced_add.
+  - exact/well_ordered_add.
+move=> /andP[] xl xr.
+rewrite mem_join//.
+  rewrite well_orderedP; apply/andP; split=> //.
+  apply/allP => //= {}y /(maxP lwo).
+  rewrite itv_boundlr/=.
+  move: xl; case: (max l) => [ml|//]/= mlx yml.
+  exact/(le_lt_trans yml).
+move: rwo; rewrite well_orderedP => /andP[] rwo /(allP _ rwo) ri.
+rewrite well_orderedP; apply/andP; split=> //.
+apply/allP => //= {}y /(minP rwo).
+rewrite itv_boundlr/=.
+move: xr; case: (min r) => [mr|//]/= xmr mry.
+by rewrite andbT; apply/(lt_le_trans xmr).
+Qed.
+
+Lemma well_formed_try_concat l r : well_formed l -> well_formed r -> well_formed (try_concat l r).
+
+End Theory.
+
+Module AllExports. HB.reexport. End AllExports.
 
 End Subdef.
 
-Fixpoint well_formed t :=
-  match t with
-  | leaf => true
-  | node l r h _ => (h == (maxn (height l) (height r)).+1) && (well_formed l) && (well_formed r)
-  end.
+Import Subdef.AllExports.
 
-Fixpoint balanced t :=
-  match t with
-  | leaf => true
-  | node l r h _ => (diffn (height l) (height r) <= 2) && (balanced l) && (balanced r)
-  end.
+Section Def.
+Variables (d : unit) (elt : orderType d).
 
-Fixpoint well_ordered_subdef t lb ub := 
-  match t with
-  | leaf => true
-  | node l r _ x => (map_or (fun lb => lb < x)%O true lb) && (map_or (fun ub => x < ub) true ub)%O && (well_ordered_subdef l lb (Some x)) && (well_ordered_subdef r (Some x) ub)
-  end.
+Definition t := {s : Subdef.t elt | Subdef.is_avl s}.
 
-Lemma well_ordered_subdefWl t lb lb' ub : map_or (fun lb' => map_or (>= lb')%O false lb) true lb'-> well_ordered_subdef t lb ub -> well_ordered_subdef t lb' ub.
-Proof.
-elim: t lb lb' ub => [//|] l IHl r IHr/= _ x lb lb' ub lb'lb
-    /andP[]/andP[]/andP[] lbx xub lwo rwo.
-rewrite xub andbT.
-apply/andP; split; last first.
-  apply/IHr; last exact: rwo.
-  exact: le_refl.
-apply/andP; split; last by apply/IHl; last exact: lwo.
-by case: lb' lb'lb lbx => [|//]lb'; case: lb {lwo} => [|//]lb /=; apply: le_lt_trans.
-Qed.
+Definition empty : t.
+by exists (Subdef.leaf elt).
+Defined.
 
-Lemma well_ordered_subdefWr t lb ub ub' : map_or (fun ub' => map_or (<= ub')%O false ub) true ub' -> well_ordered_subdef t lb ub -> well_ordered_subdef t lb ub'.
-Proof.
-elim: t lb ub ub' => [//|] l IHl r IHr/= _ x lb ub ub' ubub'
-    /andP[]/andP[]/andP[] lbx xub lwo rwo.
-rewrite lbx/=.
-apply/andP; split; last by apply/IHr; last exact: rwo.
-apply/andP; split; last first.
-  apply/IHl; last exact: lwo.
-  exact: le_refl.
-by case: ub' ubub' xub => [|//]ub'; case: ub {rwo} => [|//]ub /= /[swap]; apply: lt_le_trans.
-Qed.
+Definition is_empty (s : t) := Subdef.is_empty (val s).
 
-Definition well_ordered t := well_ordered_subdef t None None .
-Arguments well_ordered : simpl never.
+Definition singleton (x : elt) : t.
+by exists (Subdef.singleton x).
+Defined.
 
-Definition is_avl t := (well_formed t) && (balanced t) && (well_ordered t).
+Definition add (x : elt) (s : t) : t.
+move: (valP s) => /andP[]/andP[] swf sb swo.
+exists (Subdef.add x (val s)).
+apply/andP; split; [apply/andP; split|].
+- exact/Subdef.well_formed_add.
+- exact/Subdef.balanced_add.
+- exact/Subdef.well_ordered_add.
+Defined.
 
-Definition t := {x | is_avl x}.
+Definition split (x : elt) (s : t) : t * bool * t.
+move: (valP s) => /andP[]/andP[] swf sb swo.
+split; [split|].
+- exists (Subdef.split x (val s)).1.1.
+  apply/andP; split; [apply/andP; split|].
+  + exact/Subdef.well_formed_splitl.
+  + exact/Subdef.balanced_splitl.
+  + exact/(Subdef.well_orderedWT (Subdef.well_ordered_splitl x swo)).
+- exact/(Subdef.split x (val s)).1.2.
+- exists (Subdef.split x (val s)).2.
+  apply/andP; split; [apply/andP; split|].
+  + exact/Subdef.well_formed_splitr.
+  + exact/Subdef.balanced_splitr.
+  + exact/(Subdef.well_orderedWT (Subdef.well_ordered_splitr x swo)).
+Defined.
 
-Definition empty : t := exist _ leaf erefl.
+Definition remove (x : elt) (s : t) : t.
+move: (valP s) => /andP[]/andP[] swf sb swo.
+exists (Subdef.remove x (val s)).
+apply/andP; split; [apply/andP; split|].
+- exact/Subdef.well_formed_remove.
+  Search Subdef.remove.
+- exact/Subdef.balanced_remove.
+- exact/Subdef.well_ordered_remove.
+Defined.
 
-Definition singleton x : t := exist _ (node leaf leaf 1 x) erefl.
+Definition union (s u : t) : t.
+move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
+exists (Subdef.union (val s) (val u)).
+apply/andP; split; [apply/andP; split|].
+- exact/Subdef.well_formed_union.
+- exact/Subdef.balanced_union.
+- exact/Subdef.well_ordered_union.
+Defined.
 
-Definition height (t : t) := height (val t).
-Arguments height : simpl never.
+Definition inter (s u : t) : t.
+move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
+exists (Subdef.inter (val s) (val u)).
+apply/andP; split; [apply/andP; split|].
+- exact/Subdef.well_formed_inter.
+- exact/Subdef.balanced_inter.
+- exact/Subdef.well_ordered_inter.
+Defined.
 
-Fixpoint size_subdef t :=
-  match t with
-  | leaf => 0
-  | node l r _ _ => ((size_subdef l) + size_subdef r).+1
-  end.
+Definition disjoint (s t : t) := Subdef.disjoint (val s) (val t).
 
-Definition size (t : t) := size_subdef (val t).
-Arguments size : simpl never.
+Definition diff (s u : t) : t.
+move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
+exists (Subdef.diff (val s) (val u)).
+apply/andP; split; [apply/andP; split|].
+- exact/Subdef.well_formed_diff.
+- exact/Subdef.balanced_diff.
+- exact/Subdef.well_ordered_diff.
+Defined.
 
-Fixpoint all_subdef (P : pred elt) t :=
-  match t with
-  | leaf => true
-  | node l r _ x => (P x) && (all_subdef P l) && (all_subdef P r)
-  end.
+Definition subset (s t : t) := Subdef.subset (val s) (val t).
 
-Definition all P (t : t) := all_subdef P (val t).
-Arguments all : simpl never.
+Definition fold rT (f : elt -> rT -> rT) s accu :=
+  Subdef.fold f s accu.
 
-Fixpoint mem_subdef (x : elt) t :=
-  match t with
-  | node l r _ y => (x == y) || (if (x < y)%O then mem_subdef x l else mem_subdef x r)
-  | leaf => false
-  end.
+Definition mem (s : t) x := Subdef.mem (val s) x.
 
-Definition mem x (t : t) := mem_subdef x (val t).
-Arguments mem : simpl never.
+Definition all p (s : t) := Subdef.all p (val s).
 
-Lemma mem_well_ordered_subdef x t lb ub : well_ordered_subdef t lb ub -> mem_subdef x t -> map_or (< x)%O true lb /\ map_or (> x)%O true ub.
-Proof.
-elim: t lb ub => [//|] l IHl r IHr h tx lb ub/= /andP[]/andP[]/andP[] lbtx txub /IHl {}IHl /IHr {}IHr.
-case /comparable_ltgtP: (comparableT x tx) => [_ /= /IHl/= [lbx xtx]|_ /= /IHr/= [txx xub]|-> //]; split=> //.
-  by case: ub txub {IHr} => [|//]ub/=; apply/lt_trans.
-by case: lb lbtx {IHl} => [|//]lb/= lbtx; apply: (lt_trans lbtx).
-Qed.
+Definition has p (s : t) := Subdef.has p (val s).
 
-Fixpoint opp_subdef (t : t_subdef) :=
-  match t with
-  | leaf => leaf
-  | node l r h x => node (opp_subdef r) (opp_subdef l) h x
-  end.
+Definition filter (p : pred elt) (s : t) : t.
+move: (valP s) => /andP[]/andP[] swf sb swo.
+exists (Subdef.filter p (val s)).
+apply/andP; split; [apply/andP; split|].
+- exact/Subdef.well_formed_filter.
+- exact/Subdef.balanced_filter.
+- exact/Subdef.well_ordered_filter.
+Defined.
 
-Lemma height_opp_subdef t : height (opp_subdef t) = height t.
-Proof. by case: t. Qed.
-
-Lemma well_formed_opp_subdef t : well_formed (opp_subdef t) = well_formed t.
-Proof.
-by elim: t => //= l -> r -> h _; rewrite 2!height_opp_subdef -2!andbA [well_formed _ && _]andbC maxnC.
-Qed.
-
-Lemma balanced_opp_subdef t : balanced (opp_subdef t) = balanced t.
-Proof.
-by elim: t => //= l -> r -> _ _; rewrite 2!height_opp_subdef -2!andbA [balanced _ && _]andbC diffnC.
-Qed.
-
-(* We assume t is well_heighted, so a lot of `leaf` cases are discarded. *)
-Definition balance_node t := (fun t =>
-  match t with
-  | leaf => t
-  | node l r h x => if diffn (height r) (height l) <= 1 then t else
-    if (height r).+1 < height l then
-      match l with
-      | leaf => t
-      | node ll lr lh lx =>
-        if height ll < height lr then
-          match lr with
-          | leaf => t
-          | node lrl lrr lrh lrx => let hl := (maxn (height ll) (height lrl)).+1 in
-            let hr := (maxn (height lrr) (height r)).+1 in
-            node (node ll lrl hl lx) (node lrr r hr x) (maxn hl hr).+1 lrx
-          end
-        else let hr := (maxn (height lr) (height r)).+1 in
-          node ll (node lr r hr x) (maxn (height ll) hr).+1 lx
-      end
-    else
-      match r with
-      | leaf => t
-      | node rl rr rh rx =>
-        if height rr < height rl then
-          match rl with
-          | leaf => t
-          | node rll rlr rlh rlx => let hl := (maxn (height l) (height rll)).+1 in
-            let hr := (maxn (height rlr) (height rr)).+1 in
-            node (node l rll hl x) (node rlr rr hr rx) (maxn hl hr).+1 rlx
-          end
-        else let hl := (maxn (height l) (height rl)).+1 in
-          node (node l rl hl x) rr (maxn hl (height rr)).+1 rx
-      end
-  end) t.
-Arguments balance_node : simpl never.
-
-Lemma balance_node_opp_subdef t : balance_node (opp_subdef t) = opp_subdef (balance_node t).
-Proof.
-case: t => //= l r h x; rewrite /balance_node !height_opp_subdef.
-case: (leq_diffn1P _ _); case: (leq_diffn1P _ _) => // + _; last first.
-  case: r => [//|] rl rr rh rx /= _; rewrite !height_opp_subdef.
-  case: (ltnP _ _) => [|_ /=]; last first.
-    by congr node; rewrite maxnC//; congr ((maxn _ _).+1); rewrite maxnC.
-  case: rl => [//|rll rlr rlh rlx] _ /=.
-  by rewrite !height_opp_subdef; congr node; rewrite maxnC//; congr ((maxn _ _).+1); rewrite maxnC.
-case: l => [//|ll lr lh lx] _ /=; rewrite !height_opp_subdef.
-case: (ltnP _ _) => [|_ /=]; last first.
-  by congr node; rewrite maxnC//; congr ((maxn _ _).+1); rewrite maxnC.
-case: lr => [//|lrl lrr lrh lrx] _ /=.
-by rewrite !height_opp_subdef; congr node; rewrite maxnC//; congr ((maxn _ _).+1); rewrite maxnC.
-Qed.
-
-Lemma well_formed_balance_node t :
-  well_formed t -> well_formed (balance_node t).
-Proof.
-case: t => [//|] l r h x /= /andP[]/andP[] => /eqP -> {h}.
-wlog: l r / height r <= height l => [H|rl] lwf rwf.
-  move/orP: (le_total (height r) (height l)); case=> [rl|lr].
-    exact: H.
-  rewrite -well_formed_opp_subdef -balance_node_opp_subdef/= maxnC -height_opp_subdef -(height_opp_subdef l).
-  by apply: H; rewrite ?well_formed_opp_subdef//  2!height_opp_subdef.
-rewrite /balance_node; case: (leq_diffn1P _ _); last by rewrite /= eqxx lwf.
-  by move/leqW: rl; rewrite leqNgt => /negPf ->.
-case: l lwf {rl} => [//|] ll lr lh lx /= /andP[]/andP[] /eqP -> llwf lrwf _.
-case: (ltnP (height ll) (height lr)) => [|_].
-case: lr lrwf => [//|] lrl lrr lrh /= _ /andP[]/andP[] /eqP -> {lrh} lrlwf lrrwf _.
-  by rewrite !eqxx/= llwf lrlwf lrrwf.
-by rewrite /= 2!eqxx/= llwf lrwf.
-Qed.
-
-Lemma balanced_balance_node l r h x :
-  well_formed l -> balanced l -> well_formed r -> balanced r -> diffn (height l) (height r) <= 2
-  -> balanced (balance_node (node l r h x)).
-Proof.
-wlog: l r / height r <= height l => [H|rlh] lwf lb rwf rb lrd.
-  move/orP: (le_total (height r) (height l)); case=> [rlh|lrh].
-    exact: H.
-  rewrite -balanced_opp_subdef -balance_node_opp_subdef/=.
-  by apply: H; rewrite ?well_formed_opp_subdef// ?balanced_opp_subdef// 2!height_opp_subdef// diffnC.
-move: (rlh) (rlh) lrd; rewrite diffn_subnE => /maxn_idPl -> /minn_idPr ->; rewrite leq_subLR addn2 => lrh.
-rewrite /balance_node; case: (leq_diffn1P _ _); last by rewrite /= lb diffnC => ->.
-  by move/leqW: rlh => /[dup] rlh; rewrite leqNgt => /negPf ->.
-case: l lwf lb lrh {rlh} => [//|] ll lr lh lx /= /andP[]/andP[] /eqP -> {lh} _ lrwf /andP[]/andP[].
-rewrite /diffn; case: (ltnP _ _) => + + llb lrb; rewrite leq_subLR addn1; last first.
-  rewrite !ltnS => lrh llh /= llr rll.
-  move: (leq_trans rll llh); rewrite ltnS => /[dup] rlr /maxn_idPl ->.
-  by rewrite llb lrb rb 3!andbT !geq_diffn !addn1 (leqW llh) ltnS lrh (leq_trans lrh llr) (leqW rlr).
-case: lr lrwf lrb => [//|] lrl lrr lrh lrx /= /andP[]/andP[] /eqP -> {lrh} _ _ /andP[]/andP[] + lrlb lrrb.
-rewrite geq_diffn !addn1 !ltnS diffnS => /andP[] lrlh lrrh; mk_conj => /anti_leq ->; mk_conj => /anti_leq <-.
-rewrite rb llb lrlb lrrb 4!andbT maxnAC maxnn maxnCA maxnn diffnn/= !diffn_subnE.
-rewrite maxnAC maxnn maxnK -maxnCA maxnn maxKn !leq_subLR !addn1.
-by case: (ltnP (height lrl) (height lrr)) => _; rewrite ?lrlh ?lrrh leqnSn.
-Qed.
-
-Lemma well_ordered_subdef_balance_node t lb ub :
-  well_ordered_subdef t lb ub -> well_ordered_subdef (balance_node t) lb ub.
-Proof.
-case: t lb ub => [//|] l r h x lb ub/= /andP[]/andP[]/andP[] lbx xub lwo rwo.
-rewrite /balance_node; case: (leq_diffn1P _ _) => [+|+|_]; last first.
-- by rewrite /= lbx xub lwo.
-- case: l lwo => [//|] ll lr lh lx /= /andP[]/andP[]/andP[] lblx lxx llwo lrwo _.
-  case: (ltnP _ _); last first.
-    rewrite /= lblx lxx llwo lrwo rwo xub.
-    by case: ub xub {rwo} => [ub|//]/= /(lt_trans lxx) ->.
-  case: lr lrwo => [//|] lrl lrr lrh lrx /= /andP[]/andP[]/andP[] lxlrx lrxx -> -> _.
-  rewrite lblx xub lxlrx llwo rwo lrxx !andbT; apply/andP; split.
-    by case: lb lblx {lbx llwo} => [lb|//]/= lblx; apply: (lt_trans lblx).
-  by case: ub xub {rwo} => [ub|//]/=; apply/lt_trans.
-case: r rwo => [//|] rl rr rh rx /= /andP[]/andP[]/andP[] xrx rxub rlwo rrwo _.
-case: (ltnP _ _); last first.
-  rewrite /= rxub lbx xrx lwo rlwo rrwo !andbT.
-  by case: lb lbx {lwo} => [lb|//]/= lbx _; apply: (lt_trans lbx).
-case: rl rlwo => [//|] rll rlr rlh rlx /= /andP[]/andP[]/andP[] xrlx rlxrx -> -> _.
-rewrite lbx xrlx lwo rlxrx rxub rrwo !andbT; apply/andP; split.
-  by case: lb lbx {lwo} => [lb|//]/= lbx; apply: (lt_trans lbx).
-by case: ub rxub {xub rrwo} => [ub|//]/=; apply/lt_trans.
-Qed.
-
-Lemma height_balance_nodel ll lr r h hl x xl :
-  well_formed (node (node ll lr hl xl) r h x) -> (height r).+1 < hl ->
-  height (balance_node (node (node ll lr hl xl) r h x)) = hl + (height ll == height lr).
-Proof.
-rewrite /balance_node => /= /andP[]/andP[] /eqP -> /andP[]/andP[] /eqP -> _ lrwf _.
-case: (leq_diffn1P _ _) => // + _; rewrite ltnS.
-case: (ltnP (height ll) (height lr)); last first.
-  rewrite /= -(maxnSS (height lr) _) maxnCA => + /maxn_idPl ->.
-  have [-> _|] := (eqVneq (height lr) (height ll)).
-    by move: (leqnSn (height ll)) => /maxn_idPl ->; rewrite addn1.
-  by mk_conj; rewrite -ltn_neqAle addn0 => /maxn_idPr ->.
-case: lr lrwf => [//|] lrl lrr lrh lrx /= /andP[]/andP[] /eqP -> _ _ /[dup] /ltn_eqF ->. 
-by rewrite maxnSS !ltnS maxnA -(maxnA (height ll)) addn0 => /maxn_idPr -> /maxn_idPl ->.
-Qed.
-
-Lemma balance_node_balanced' l r h x :
-  diffn (height l) (height r) <= 1 -> balance_node (node l r h x) = node l r h x.
-Proof. by rewrite /balance_node; case: (leq_diffn1P _ _). Qed.
-
-Lemma height_balance_node t :
-  well_formed t -> (height t).-1 <= height (balance_node t) <= (height t).
-Proof.
-case: t => [//|] l r h x /= /andP[]/andP[] /eqP -> {h}; rewrite -pred_Sn.
-wlog: l r / height r <= height l => [H|rlh] lwf rwf.
-  move/orP: (le_total (height r) (height l)); case=> [rlh|lrh].
-    exact: H.
-  rewrite -height_opp_subdef -(height_opp_subdef r) -(height_opp_subdef (balance_node _)) -balance_node_opp_subdef/= maxnC.
-  by apply: H; rewrite ?well_formed_opp_subdef// !height_opp_subdef.
-move: (rlh) => /maxn_idPl ->.
-case /boolP: (diffn (height l) (height r) <= 1).
-  by move=> /balance_node_balanced' -> /=; rewrite leqnn leqnSn.
-rewrite /balance_node; case: (leq_diffn1P _ _) => // + _; last first.
-  by move/leqW: rlh => /[dup] rlh; rewrite leqNgt => /negPf ->.
-case: l lwf {rlh} => [//|] ll lr lh lx /= /andP[]/andP[] lhE llwf lrwf rlh.
-move: (rlh) => /(@height_balance_nodel ll lr r lh.+1 lh x lx) => /=; mp. 
-  rewrite eqSS lhE llwf lrwf rwf !andbT; apply/eqP/esym/maxn_idPl.
-  by move: rlh => /leqW/leqW; rewrite 2!ltnS.
-move: rlh; rewrite /balance_node; case: (leq_diffn1P (height r) lh) => // rlh _.
-move=> ->.
-by have [_|_] := (eqVneq (height ll) (height lr));
-  rewrite ?addn1 ?addn0 leqnn leqnSn.
-Qed.
-
-Lemma mem_balance_node x t : well_ordered t -> mem_subdef x (balance_node t) = mem_subdef x t.
-Proof.
-case: t => [//|] l r h tx /andP[]/andP[] _; rewrite -/well_ordered_subdef /balance_node => lwo rwo; case: (leq_diffn1P _ _) => //.
-  case: r rwo => [//|] rl rr rh rx /= /andP[]/andP[]/andP[] txrx _ rlwo _ _.
-  case: (ltnP _ _) => [|_ /=]; last first.
-    case /comparable_ltgtP: (comparableT x tx) => [xtx|//|->] /=; last by rewrite txrx orbT.
-    by move: (lt_trans xtx txrx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf ->.
-  case: rl rlwo => [//|] rll rlr rlh rlx/= /andP[]/andP[]/andP[] txrlx rlxrx _ _ _.
-  case /comparable_ltgtP: (comparableT x tx) => [xtx|_|->] /=; last by rewrite txrlx orbT.
-    by move: (lt_trans xtx txrlx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf ->.
-  case /comparable_ltgtP: (comparableT x rlx) => [xrlx|//|->] /=; last by rewrite rlxrx orbT.
-  by move: (lt_trans xrlx rlxrx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf ->.
-case: l lwo => [//|] ll lr lh lx /= /andP[]/andP[] lxtx _ lrwo _. 
-case: (ltnP _ _) => [|_ /=]; last first.
-  case /comparable_ltgtP: (comparableT x lx) => [xlx|//|->] /=; last by rewrite lxtx orbT.
-  by move: (lt_trans xlx lxtx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf ->.
-case: lr lrwo => [//|] lrl lrr lrh lrx/= /andP[]/andP[]/andP[] lxlrx lrxtx _ _ _.
-case /comparable_ltgtP: (comparableT x lx) => [xlx|_|->] /=; last by rewrite lxlrx (lt_trans lxlrx lrxtx) !orbT.
-  move: (lt_trans xlx lxlrx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf -> xlrx.
-  by move: (le_lt_trans xlrx lrxtx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf ->.
-case /comparable_ltgtP: (comparableT x lrx) => [xlrx|//|->] /=; last by rewrite lrxtx orbT.
-by move: (lt_trans xlrx lrxtx) => /[dup] + ->; rewrite lt_neqAle => /andP[] /negPf ->.
-Qed.
-
-Fixpoint add_subdef x t :=
-  match t with
-  | leaf => node leaf leaf 1 x
-  | node l r h y => if x == y then t else
-    if (x < y)%O then balance_node (node (add_subdef x l) r (maxn (height (add_subdef x l)) (height r)).+1 y)
-    else balance_node (node l (add_subdef x r) (maxn (height l) (height (add_subdef x r))).+1 y)
-  end.
-
-Lemma well_formed_add x t :
-  well_formed t -> well_formed (add_subdef x t).
-Proof.
-elim: t => [//|] l IHl r IHr h y.
-rewrite /add_subdef.
-case /comparable_ltgtP: (comparableT x y) => // _ /andP[]/andP[] hE /[dup] lw /IHl lw' /[dup] rw /IHr rw'; apply/well_formed_balance_node; rewrite /= eqxx /=.
-  by rewrite lw'.
-by rewrite rw' andbT.
-Qed.
-
-Lemma balanced_add x t :
-  well_formed t -> balanced t -> balanced (add_subdef x t).
-Proof.
-move=> twf tb; suff: balanced (add_subdef x t) /\ height t <= height (add_subdef x t) <= (height t).+1.
-  by move=> [+ _].
-elim: t twf tb => [//|] l IHl r IHr h y /=
-  /andP[]/andP[/eqP -> {h}] /[dup] lwf /IHl {}IHl /[dup] rwf /IHr {}IHr
-  /andP[]/andP[/[dup] lrd +] /[dup] lb /IHl {IHl} [xlb /andP[lxl xll]] /[dup] rb /IHr {IHr} [xrb /andP[rxr xrr]].
-rewrite geq_diffn 2!addn1 => /andP[lrh rlh].
-case /comparable_ltgtP: (comparableT x y) => _ /=; last first.
-- by split; [rewrite lrd lb | apply/andP; split].
-- split.
-    apply/balanced_balance_node => //; first exact/well_formed_add.
-    rewrite geq_diffn !addn2; apply/andP; split.
-      by apply: (leq_trans lrh); rewrite ltnS; apply/leqW.
-    by apply: (leq_trans xrr); rewrite ltnS.
-  move: (@height_balance_node (node l (add_subdef x r)
-      (maxn (height l) (height (add_subdef x r))).+1 y)); mp.
-    by rewrite /= eqxx lwf well_formed_add.
-  move=> /andP[]/= bge ble.
-  apply/andP; split; last first.
-    apply: (leq_trans ble); rewrite ltnS geq_max; apply/andP; split.
-      exact/leqW/leq_maxl.
-    by rewrite -maxnSS leq_max xrr orbT.
-  case /boolP: (diffn (height l) (height (add_subdef x r)) <= 1) => [lxr|].
-    rewrite balance_node_balanced'//= ltnS geq_max leq_maxl/=.
-    exact/(leq_trans rxr)/leq_maxr.
-  move: rxr; rewrite geq_diffn !addn1 -ltnS => /(leq_trans lrh) -> /=.
-  rewrite -ltnNge => lxr.
-  move: (@height_balance_node (node l (add_subdef x r)
-        (maxn (height l) (height (add_subdef x r))).+1 y)); mp.
-    by rewrite /= eqxx lwf/=; apply/well_formed_add.
-  move=> /= /andP[+ _]; apply leq_trans.
-  move: (lxr) => /leqW/leqW; rewrite 2!ltnS => /maxn_idPr ->.
-  rewrite gtn_max; apply/andP; split; last exact/(leq_ltn_trans rlh).
-  by rewrite -ltnS; apply/leqW.
+Definition partition (p : pred elt) (s : t) : t * t.
+move: (valP s) => /andP[]/andP[] swf.
+move=> /(Subdef.balanced_partition p swf) /andP[] lb rb.
+move=> /(Subdef.well_ordered_partition p) /andP[] lo ro.
+move: swf => /(Subdef.well_formed_partition p) /andP[] lf rf.
 split.
-  apply/balanced_balance_node => //; first exact/well_formed_add.
-  rewrite geq_diffn !addn2; apply/andP; split.
-    by apply: (leq_trans xll); rewrite ltnS.
-  by apply: (leq_trans rlh); rewrite ltnS; apply/leqW.
-move: (@height_balance_node (node (add_subdef x l) r
-    (maxn (height (add_subdef x l)) (height r)).+1 y)); mp.
-  by rewrite /= eqxx rwf well_formed_add.
-move=> /andP[]/= bge ble.
-apply/andP; split; last first.
-  apply: (leq_trans ble); rewrite ltnS geq_max; apply/andP; split.
-    by rewrite -maxnSS leq_max xll.
-  exact/leqW/leq_maxr.
-case /boolP: (diffn (height (add_subdef x l)) (height r) <= 1) => [xlr|].
-  rewrite balance_node_balanced'//= ltnS geq_max leq_maxr/= andbT.
-  exact/(leq_trans lxl)/leq_maxl.
-move: lxl; rewrite geq_diffn !addn1 -ltnS => /(leq_trans rlh) -> /=.
-rewrite andbT -ltnNge => rxl.
-move: (@height_balance_node (node (add_subdef x l) r
-        (maxn (height (add_subdef x l)) (height r)).+1 y)); mp.
-  by rewrite /= eqxx rwf andbT; apply/well_formed_add.
-move=> /= /andP[+ _]; apply leq_trans.
-move: (rxl) => /leqW/leqW; rewrite 2!ltnS => /maxn_idPl ->.
-rewrite gtn_max; apply/andP; split; first exact/(leq_ltn_trans lrh).
-by rewrite -ltnS; apply/leqW.
-Qed.
+  exists (Subdef.partition p (val s)).1.
+  by apply/andP; split; [apply/andP; split|].
+exists (Subdef.partition p (val s)).2.
+by apply/andP; split; [apply/andP; split|].
+Defined.
 
-Lemma well_ordered_add x t lb ub :
-  well_ordered_subdef t lb ub -> map_or (< x)%O true lb -> map_or (> x)%O true ub ->
-  well_ordered_subdef (add_subdef x t) lb ub.
-Proof.
-elim: t lb ub => [lb ub/= _ -> ->//|l IHl r IHr h xt] lb ub/=
-  /andP[]/andP[]/andP[] lbxt xtub lwo rwo lbx xub.
-case /comparable_ltgtP: (comparableT x xt) => [xxt|xtx|xxt]; last first.
-- by rewrite /= lbxt xtub lwo.
-- apply/well_ordered_subdef_balance_node; rewrite /= lbxt xtub lwo/=.
-  exact: IHr.
-- apply/well_ordered_subdef_balance_node; rewrite /= lbxt xtub rwo andbT/=.
-  exact: IHl.
-Qed.
+Definition card (s : t) := Subdef.card (val s).
 
-Lemma is_avl_add x (t : t) : is_avl (add_subdef x (val t)).
-Proof.
-case: t => t/= /andP[]/andP[] twf tb two.
-apply/andP; split; last exact: well_ordered_add.
-apply/andP; split; first exact: well_formed_add.
-exact: balanced_add.
-Qed.
-    
-Definition add x (t : t) : Def.t := exist _ (add_subdef x (val t)) (is_avl_add x t).
+Definition elements (s : t) := Subdef.elements (val s).
 
-Lemma mem_add x y (t : t) : mem x (add y t) = (x == y) || mem x t.
-Proof.
-rewrite /mem/add/=; case: t => t/= /andP[] _.
-elim: t => [//=|l IHl r IHr h tx/=]; first by rewrite if_same.
-rewrite /well_ordered/= => /andP[] /[dup] lwo /(well_ordered_subdefWr (ub':=None) erefl) /IHl {}IHl /[dup] rwo /(well_ordered_subdefWl (lb':=None) erefl) /IHr {}IHr.
-case /comparable_ltgtP: (comparableT y tx) => [ytx|txy|->]; last by rewrite !orbA orbb.
-  rewrite mem_balance_node/=; last by rewrite /well_ordered/= rwo andbT; apply/well_ordered_add.
-  case: (ltP x tx) => [xtx|txx]; first by rewrite IHl !orbA [(_ == _) || _]orbC.
-  by move: (lt_le_trans ytx txx); rewrite lt_neqAle eq_sym => /andP[] /negPf ->.
-rewrite mem_balance_node/=; last by rewrite /well_ordered/= lwo/=; apply/well_ordered_add.
-case /comparable_ltgtP: (comparableT x tx) => [xtx|//|->].
-  by move: (lt_trans xtx txy); rewrite lt_neqAle eq_sym => /andP[] /negPf ->.
-by move: txy; rewrite lt_neqAle eq_sym => /andP[] /negPf ->.
-Qed.
-
-Fixpoint pop_min_subdef (t : t_subdef) : t_subdef * option elt :=
-  match t with
-  | leaf => (t, None)
-  | node l r h x =>
-      match l with
-      | leaf => (r, Some x)
-      | node ll lr lh lx => let (l, y) := pop_min_subdef l in (balance_node (node l r (maxn (height l) (height r)).+1 x), y)
-      end
-  end.
-
-Lemma pop_min_subdef0 t : ((pop_min_subdef t).2 == None) = (t == leaf).
-Proof.
-elim: t => [//|] l IHl r _ h x/=.
-move: (pop_min_subdef l) IHl => [pml ml]/=.
-by case: l => [//|] ll lr lh lx ->.
-Qed.
-
-Lemma well_formed_pop_min_subdef t : well_formed t -> well_formed (pop_min_subdef t).1.
-Proof.
-elim: t => [//|] l IHl r _/= h x /= /andP[]/andP[] _ {h} /IHl {}IHl rwf.
-move: (pop_min_subdef l) IHl => [pml ml] /= pmlwf.
-case: l => [//|] ll lr lh lx /=.
-by apply/well_formed_balance_node; rewrite /= eqxx pmlwf.
-Qed.
-
-
-Lemma balanced_height_pop_min_subdef t : well_formed t -> balanced t -> balanced (pop_min_subdef t).1 /\ (height t).-1 <= height (pop_min_subdef t).1 <= height t.
-Proof.
-elim: t => [//|] l IHl r _ h x /= /andP[]/andP[] /eqP -> {h} /IHl {}IHl rwf /andP[]/andP[] lrd /IHl {IHl} [pmlb pmlh] rb.
-move: (pop_min_subdef l) pmlb pmlh => [pml ml]/= pmlb pmlh.
-case: l lrd pmlh => /=.
-  by move=> _ _; split=> //; rewrite max0n leqnn leqnSn.
-move=> _ _ h _ hrd /andP[] hpml pmlh.
-move: hpml; rewrite -ltnS => /(leq_trans (leqSpred h)) hpml.
-case /boolP: (diffn (height pml) (height r) <= 1).
-  move=> /[dup] pmlrd /balance_node_balanced' -> /=.
-  rewrite pmlrd pmlb; split=> //.
-  rewrite ltnS 2!geq_max leq_maxr leq_max pmlh/= andbT; apply/andP; split; last first.
-    exact/leqW/leq_maxr.
-  by apply: (leq_trans hpml); rewrite ltnS leq_maxl.
-move=> pmlr.
-have hE: h = (height pml).+1.
-  move: hrd; have [-> pmlr'|hpmlne _] := eqVneq h (height pml).
-    by move: pmlr; rewrite pmlr'.
-  by apply/anti_leq/andP; split=> //; rewrite ltn_neqAle eq_sym hpmlne.
-subst h.
-move: hrd pmlr {hpml pmlh}; rewrite !geq_diffn !addn1 ltnS => /andP[] /[dup] pmlr /leqW -> rpml /=.
-rewrite -ltnNge /balance_node; case: (leq_diffn1P _ _) => // {}pmlr _.
-move: rpml pmlr; mk_conj => /anti_leq.
-case: r rwf rb => [//|] rl rr rh rx/= /andP[]/andP[] /eqP -> {rh} rlwf _ /andP[]/andP[] + rlb rrb /eqP => /[swap].
-rewrite diffn_subnE leq_subLR addn1 eqSS; case: (ltnP (height rr) (height rl)) => /[swap] /eqP /[dup] + ->; last first.
-  rewrite /= ltnS => rrE rlpml /[dup] pmlrl /maxn_idPr ->.
-  rewrite !maxnSS (maxn_idPl pmlrl) (maxn_idPr (leqnSn (height pml))) rrE diffnS diffnC pmlb rlb rrb !andbT andbb !ltnS; split; last first.
-    by apply/andP; split.
-  by rewrite geq_diffn !addn1 rlpml andbT; apply/leqW.
-move=> rlpml; mk_conj => /anti_leq /eqP; rewrite eqSS => /eqP rrpml.
-case: rl rlwf rlb rlpml => [//|] rll rlr rlh rlx/= /andP[]/andP[] /eqP -> {rlh} _ _ /andP[]/andP[] rd -> -> /eqP.
-rewrite eqSS => /eqP pmlE.
-rewrite !ltnS diffnS pmlb rrb !maxnSS (maxn_idPr (leqnSn (height pml))) !ltnS rrpml -pmlE.
-rewrite maxnAC maxnn maxnCA maxnn diffnn/= maxnn leqnn leqnSn; split=> //.
-by move: rd; rewrite !andbT !geq_diffn !addn1 -!maxnSS !geq_max !leq_max !leqnSn => /andP[] -> ->.
-Qed.
-
-Lemma balanced_pop_min_subdef t : well_formed t -> balanced t -> (height t).-1 <= height (pop_min_subdef t).1 <= height t.
-Proof. by move=> twf /(balanced_height_pop_min_subdef twf) [_]. Qed.
-
-
-Lemma height_pop_min_subdef t : well_formed t -> balanced t -> balanced (pop_min_subdef t).1.
-Proof. by move=> twf /(balanced_height_pop_min_subdef twf) [+ _]. Qed.
-  
-Lemma well_ordered_pop_min_subdef t lb ub : well_ordered_subdef t lb ub -> (well_ordered_subdef (pop_min_subdef t).1 (pop_min_subdef t).2 ub /\ map2_or <%O true lb (pop_min_subdef t).2 /\ map2_or <%O true (pop_min_subdef t).2 ub).
-Proof.
-case: t => [|l r h x] two; first by split=> //; split=> //; case: lb {two}.
-suff: well_ordered_subdef (pop_min_subdef (node l r h x)).1 (pop_min_subdef (node l r h x)).2 ub /\ map2_or <%O true lb (pop_min_subdef (node l r h x)).2 /\ map2_or <%O true (pop_min_subdef (node l r h x)).2 ub /\ (map_or (<= x)%O true (pop_min_subdef (node l r h x)).2).
-  by move=> [pmtwo][lbmt][mtub] mtx.
-elim: l lb ub r h x two => [|ll IHll lr _ lh lx]/= lb ub r h x /andP[]/andP[]/andP[] lbx xub.
-  by rewrite le_refl => _ ->; split=> //; split.
-move=> /[dup] /andP[]/andP[]/andP[] lblx lxx _ _ /IHll-/(_ lh) []{}IHll []lbml []mllx mlllx rwo.
-move: IHll lbml mllx mlllx => /=.
-move: (pop_min_subdef ll) => [pmll mll]/=.
-case: ll => /= [|_ _ _ _].
-  move=> lrwo {}lblx _ _; split.
-    by apply/well_ordered_subdef_balance_node => /=; rewrite lxx xub lrwo.
-  split=> //; split; last exact/ltW.
-  by case: ub xub {rwo} => [|//]ub; apply/lt_trans.
-move=> pmllwo lbmll; split; last first.
-  split=> //.
-  case: mll mllx {pmllwo mlllx lbmll} => [|//]mll/= mlllx; split; last exact/ltW.
-  by case: ub xub {rwo} => [|//]ub/=; apply/lt_trans.
-apply/well_ordered_subdef_balance_node => /=.
-rewrite xub rwo pmllwo !andbT.
-by case: mll mlllx {pmllwo lbmll mllx} => [|//]mll/= mlllx; apply/(le_lt_trans mlllx).
-Qed.
-
-Lemma mem_pop_min_subdef x t : well_ordered t -> mem_subdef x (pop_min_subdef t).1 = (mem_subdef x t && (Some x != (pop_min_subdef t).2)).
-Proof.
-rewrite /well_ordered; elim: t => [//|] l IHl r _ h tx/= /andP[] lwo rwo.
-move: (pop_min_subdef l) IHl (well_ordered_pop_min_subdef lwo) => [pml ml]/= /(_ (well_ordered_subdefWr (ub':=None) erefl lwo)) IHl []pmlwo [] _ mltx.
-case: l {lwo} IHl => [|ll lr lh lx]/= IHl.
-  have: mem_subdef x r -> (tx < x)%O by move=> /(mem_well_ordered_subdef rwo) /= [].
-  rewrite (inj_eq Some_inj); case /comparable_ltgtP: (comparableT x tx) => //= _.
-  - by case: (mem_subdef x r) => // /(_ erefl).
-  - by rewrite andbT.
-  - by case: (mem_subdef x r) => // /(_ erefl).
-rewrite mem_balance_node/=; last first.
-  by rewrite /well_ordered/= rwo andbT; apply/(well_ordered_subdefWl (lb:=ml)).
-rewrite {}IHl; case /comparable_ltgtP: (comparableT x tx) => //= [txx|->].
-  case: ml mltx {pmlwo} => [ml|]/= mltx; last by rewrite andbT.
-  move: (lt_trans mltx txx); rewrite (inj_eq Some_inj) lt_neqAle eq_sym => /andP[] ->.
-  by rewrite andbT.
-case: ml mltx {pmlwo} => [|//]ml/= mltx.
-by move: mltx; rewrite (inj_eq Some_inj) lt_neqAle eq_sym => /andP[] ->.
-Qed.
-
-Lemma mem_pop_min_subdef' x t : well_ordered t -> mem_subdef x t = (mem_subdef x (pop_min_subdef t).1 || (Some x == (pop_min_subdef t).2)).
-Proof.
-rewrite /well_ordered; elim: t => [//|] l IHl r _ h tx/= /andP[] lwo rwo.
-move: (pop_min_subdef l) IHl (well_ordered_pop_min_subdef lwo) => [pml ml]/= /(_ (well_ordered_subdefWr (ub':=None) erefl lwo)) IHl []pmlwo [] _ mltx.
-case: l {lwo} IHl => [|ll lr lh lx]/= IHl.
-  have: mem_subdef x r -> (tx < x)%O by move=> /(mem_well_ordered_subdef rwo) /= [].
-  rewrite (inj_eq Some_inj); case /comparable_ltgtP: (comparableT x tx) => //= _.
-  - by case: (mem_subdef x r) => // /(_ erefl).
-  - by rewrite orbF.
-  - by case: (mem_subdef x r) => // /(_ erefl).
-rewrite mem_balance_node/=; last first.
-  by rewrite /well_ordered/= rwo andbT; apply/(well_ordered_subdefWl (lb:=ml)).
-rewrite {}IHl; case /comparable_ltgtP: (comparableT x tx) => //= txx.
-case: ml mltx {pmlwo} => [ml|] mltx/=; last by rewrite orbF.
-by move: (lt_trans mltx txx); rewrite (inj_eq Some_inj) lt_neqAle eq_sym => /andP[] /negPf ->; rewrite orbF.
-Qed.
-
-Fixpoint pop_max_subdef (t : t_subdef) : t_subdef * option elt :=
-  match t with
-  | leaf => (t, None)
-  | node l r h x =>
-      match r with
-      | leaf => (l, Some x)
-      | node ll lr lh lx => let (r, y) := pop_max_subdef r in (balance_node (node l r (maxn (height l) (height r)).+1 x), y)
-      end
-  end.
-
-Lemma pop_max_subdef0 t : ((pop_max_subdef t).2 == None) = (t == leaf).
-Proof.
-elim: t => [//|] l _ r IHr h x/=.
-move: (pop_max_subdef r) IHr => [pmr mr]/=.
-by case: r => [//|] rl rr rh rx ->.
-Qed.
-
-Lemma well_formed_pop_max_subdef t : well_formed t -> well_formed (pop_max_subdef t).1.
-Proof.
-elim: t => [//|] l _ r IHr/= h x /= /andP[]/andP[] _ {h} lwf /IHr {}IHr.
-move: (pop_max_subdef r) IHr => [pmr mr] /= pmrwf.
-case: r => [//|] rl rr rh rx /=.
-by apply/well_formed_balance_node; rewrite /= eqxx pmrwf lwf.
-Qed.
-
-Lemma balanced_height_pop_max_subdef t : well_formed t -> balanced t -> balanced (pop_max_subdef t).1 /\ (height t).-1 <= height (pop_max_subdef t).1 <= height t.
-Proof.
-elim: t => [//|] l _ r IHr h x /= /andP[]/andP[] /eqP -> {h} lwf /IHr {}IHr /andP[]/andP[] lrd lb /IHr {IHr} [pmrb pmrh].
-move: (pop_max_subdef r) pmrb pmrh => [pmr mr]/= pmrb pmrh.
-case: r lrd pmrh => /=.
-  by move=> _ _; split=> //; rewrite maxn0 leqnn leqnSn.
-move=> _ _ h _ hld /andP[] hpmr pmrh.
-move: hpmr; rewrite -ltnS => /(leq_trans (leqSpred h)) hpmr.
-case /boolP: (diffn (height l) (height pmr) <= 1).
-  move=> /[dup] lpmrd /balance_node_balanced' -> /=.
-  rewrite lpmrd pmrb lb; split=> //.
-  by rewrite ltnS 2!geq_max leq_maxl -maxnSS !leq_max leqnSn/= hpmr pmrh !orbT.
-move=> lpmr.
-have hE: h = (height pmr).+1.
-  move: hld; have [-> lpmr'|hpmrne _] := eqVneq h (height pmr).
-    by move: lpmr; rewrite lpmr'.
-  by apply/anti_leq/andP; split=> //; rewrite ltn_neqAle eq_sym hpmrne.
-subst h.
-move: hld lpmr {hpmr pmrh}; rewrite !geq_diffn !addn1 ltnS => /andP[] lpmr /[dup] pmrl /leqW -> /=.
-rewrite andbT -ltnNge /balance_node; case: (leq_diffn1P _ _) => // {}pmrl _.
-move: lpmr pmrl; mk_conj => /anti_leq.
-case: l lwf lb => [//|] ll lr lh lx/= /andP[]/andP[] /eqP -> {lh} _ lrwf /andP[]/andP[] + llb lrb /eqP => /[swap].
-rewrite diffn_subnE leq_subLR addn1 eqSS; case: (ltnP (height ll) (height lr)) => /[swap] /eqP /[dup] + ->; last first.
-  rewrite /= ltnS => llE lrpmr /[dup] pmrlr /maxn_idPl ->.
-  rewrite !maxnSS (maxn_idPr pmrlr) (maxn_idPl (leqnSn (height pmr))) llE diffnS diffnC pmrb llb lrb !andbT andbb !ltnS; split; last first.
-    by apply/andP; split.
-  by rewrite geq_diffn !addn1 lrpmr/=; apply/leqW.
-move=> lrpmr; mk_conj => /anti_leq /eqP; rewrite eqSS => /eqP llpmr.
-case: lr lrwf lrb lrpmr => [//|] lrl lrr lrh lrx/= /andP[]/andP[] /eqP -> {lrh} _ _ /andP[]/andP[] ld -> -> /eqP.
-rewrite eqSS => /eqP pmrE.
-rewrite !ltnS diffnS pmrb llb !maxnSS (maxn_idPl (leqnSn (height pmr))) !ltnS llpmr -pmrE.
-rewrite maxnAC maxnn maxnCA maxnn diffnn/= maxnn leqnn leqnSn; split=> //.
-by move: ld; rewrite !andbT !geq_diffn !addn1 -!maxnSS !geq_max !leq_max !leqnSn => /andP[] -> ->.
-Qed.
-
-Lemma balanced_pop_max_subdef t : well_formed t -> balanced t -> (height t).-1 <= height (pop_max_subdef t).1 <= height t.
-Proof. by move=> twf /(balanced_height_pop_max_subdef twf) [_]. Qed.
-
-
-Lemma height_pop_max_subdef t : well_formed t -> balanced t -> balanced (pop_max_subdef t).1.
-Proof. by move=> twf /(balanced_height_pop_max_subdef twf) [+ _]. Qed.
-  
-Lemma well_ordered_pop_max_subdef t lb ub : well_ordered_subdef t lb ub -> (well_ordered_subdef (pop_max_subdef t).1 lb (pop_max_subdef t).2 /\ map2_or <%O true lb (pop_max_subdef t).2 /\ map2_or <%O true (pop_max_subdef t).2 ub).
-Proof.
-case: t => [|l r h x] two; first by split=> //; split=> //; case: lb {two}.
-suff: well_ordered_subdef (pop_max_subdef (node l r h x)).1 lb (pop_max_subdef (node l r h x)).2 /\ map2_or <%O true lb (pop_max_subdef (node l r h x)).2 /\ map2_or <%O true (pop_max_subdef (node l r h x)).2 ub /\ (map_or (>= x)%O true (pop_max_subdef (node l r h x)).2).
-  by move=> [pmtwo][lbmt][mtub] mtx.
-elim: r lb ub l h x two => [|rl _ rr IHrr rh rx]/= lb ub l h x /andP[]/andP[]/andP[] lbx xub.
-  by move=> -> _; rewrite le_refl; split=> //; split.
-move=> lwo /[dup] /andP[]/andP[]/andP[] xrx rxub _ _ /IHrr-/(_ rh) []{}IHrr []lbmr []mrrx rxmr.
-move: IHrr lbmr mrrx rxmr => /=.
-move: (pop_max_subdef rr) => [pmrr mrr]/=.
-case: rr => /= [|_ _ _ _].
-  move=> rlwo _ {}rxub _; split.
-    by apply/well_ordered_subdef_balance_node => /=; rewrite xrx lbx rlwo andbT.
-  split; first by case: lb lbx {lwo} => [|//]lb/= lbx; apply: (lt_trans lbx).
-  by split=> //; apply/ltW.
-move=> pmrrwo xmrr; split; last first.
-  split; [|split=> //]; case: mrr xmrr {pmrrwo mrrx rxmr} => [mrr|//]/= xmrr; last exact/ltW.
-    by case: lb lbx {lwo} => [|//]lb/= lbx; apply: (lt_trans lbx).
-  by case: lb {lbx lwo}.
-apply/well_ordered_subdef_balance_node => /=.
-rewrite lbx lwo pmrrwo !andbT/=.
-by case: mrr rxmr {pmrrwo xmrr mrrx} => [|//]mrr/= /(lt_le_trans xrx).
-Qed.
-
-Lemma mem_pop_max_subdef x t : well_ordered t -> mem_subdef x (pop_max_subdef t).1 = (mem_subdef x t && (Some x != (pop_max_subdef t).2)).
-Proof.
-rewrite /well_ordered; elim: t => [//|] l _ r IHr h tx/= /andP[] lwo rwo.
-move: (pop_max_subdef r) IHr (well_ordered_pop_max_subdef rwo) => [pmr mr]/= /(_ (well_ordered_subdefWl (lb':=None) erefl rwo)) IHr []pmrwo [] txmr _.
-case: r {rwo} IHr => [|rl rr rh rx]/= IHr.
-  have: mem_subdef x l -> (x < tx)%O by move=> /(mem_well_ordered_subdef lwo) /= [].
-  rewrite (inj_eq Some_inj); case /comparable_ltgtP: (comparableT x tx) => //= _.
-  - by rewrite andbT.
-  - by case: (mem_subdef x l) => // /(_ erefl).
-  - by case: (mem_subdef x l) => // /(_ erefl).
-rewrite mem_balance_node/=; last first.
-  by rewrite /well_ordered/= lwo/=; apply/(well_ordered_subdefWr (ub:=mr)).
-rewrite {}IHr; case /comparable_ltgtP: (comparableT x tx) => //= [xtx|->].
-  case: mr txmr {pmrwo} => [mr|]/= txmr; last by rewrite andbT.
-  move: (lt_trans xtx txmr); rewrite (inj_eq Some_inj) lt_neqAle eq_sym => /andP[] ->.
-  by rewrite andbT.
-case: mr txmr {pmrwo} => [|//]mr/= txmr.
-by move: txmr; rewrite (inj_eq Some_inj) lt_neqAle eq_sym => /andP[] ->.
-Qed.
-
-Lemma mem_pop_max_subdef' x t : well_ordered t -> mem_subdef x t = (mem_subdef x (pop_max_subdef t).1 || (Some x == (pop_max_subdef t).2)).
-Proof.
-rewrite /well_ordered; elim: t => [//|] l _ r IHr h tx/= /andP[] lwo rwo.
-move: (pop_max_subdef r) IHr (well_ordered_pop_max_subdef rwo) => [pmr mr]/= /(_ (well_ordered_subdefWl (lb':=None) erefl rwo)) IHr []pmrwo [] txmr _.
-case: r {rwo} IHr => [|rl rr rh rx]/= IHr.
-  have: mem_subdef x l -> (x < tx)%O by move=> /(mem_well_ordered_subdef lwo) /= [].
-  rewrite (inj_eq Some_inj); case /comparable_ltgtP: (comparableT x tx) => //= _.
-  - by rewrite orbF.
-  - by case: (mem_subdef x l) => // /(_ erefl).
-  - by case: (mem_subdef x l) => // /(_ erefl).
-rewrite mem_balance_node/=; last first.
-  by rewrite /well_ordered/= lwo/=; apply/(well_ordered_subdefWr (ub:=mr)).
-rewrite {}IHr; case /comparable_ltgtP: (comparableT x tx) => //= xtx.
-case: mr txmr {pmrwo} => [mr|]/= txmr; last by rewrite orbF.
-by move: (lt_trans xtx txmr); rewrite (inj_eq Some_inj) lt_neqAle eq_sym => /andP[] /negPf ->; rewrite orbF.
-Qed.
-
-Fixpoint remove_subdef (x : elt) (t : t_subdef) :=
-  match t with
-  | leaf => leaf
-  | node l r h y =>
-    if (x == y) then
-      let (a, z) :=
-        if height l < height r then
-          let (r, z) := pop_min_subdef r in (l, r, z)
-        else let (l, z) := pop_max_subdef l in (l, r, z)
-      in let (l, r) := a in match z with | None => leaf | Some z => node l r (maxn (height l) (height r)).+1 z end
-    else if (x < y)%O then balance_node (let l := remove_subdef x l in node l r (maxn (height l) (height r)).+1 y)
-    else balance_node (let r := remove_subdef x r in node l r (maxn (height l) (height r)).+1 y)
-  end.
-
-Lemma well_formed_remove x t : well_formed t -> well_formed (remove_subdef x t).
-Proof.
-elim: t => [//|l xlwf r xrwf h xt] /=/andP[]/andP[] _ {h} /[dup] lwf /xlwf {}xlwf /[dup] rwf /xrwf {}xrwf.
-rewrite /remove_subdef; case /comparable_ltgtP: (comparableT x xt) => _; rewrite -/remove_subdef.
-- by apply/well_formed_balance_node => /=; rewrite eqxx xlwf.
-- by apply/well_formed_balance_node => /=; rewrite eqxx lwf.
-- case: (ltnP _ _) => _.
-    move: (pop_min_subdef r) (well_formed_pop_min_subdef rwf) => [pmr +]/= pmrwf; case=> [|//]mr /=.
-    by rewrite eqxx lwf.
-  move: (pop_max_subdef l) (well_formed_pop_max_subdef lwf) => [pml +]/= pmlwf; case=> [|//]ml /=.
-  by rewrite eqxx pmlwf.
-Qed.
-
-Lemma balanced_remove x t : well_formed t -> balanced t -> balanced (remove_subdef x t).
-Proof.
-move=> twf tb; suff: balanced (remove_subdef x t) /\ (height t).-1 <= height (remove_subdef x t) <= height t by case.
-elim: t twf tb => [//|] l xlb r xrb h xt/=
-    /andP[]/andP[] /eqP -> {h} /[dup] lwf /xlb {}xlb /[dup] rwf /xrb {}xrb
-    /andP[]/andP[] lrd /[dup] lb /xlb [{}xlb /andP[lxl xll]] /[dup] rb /xrb [{}xrb /andP[rxr xrr]].
-move: lxl; rewrite -ltnS => /(leq_trans (leqSpred (height l))) lxl.
-move: rxr; rewrite -ltnS => /(leq_trans (leqSpred (height r))) rxr.
-case /comparable_ltgtP: (comparableT x xt) => _.
-- case /boolP: (diffn (height (remove_subdef x l)) (height r) <= 1) {xrb rxr xrr}.
-    move=> /[dup] xlrd /balance_node_balanced' -> /=.
-    split; first by rewrite xlrd xlb.
-    move: lrd xlrd; rewrite !geq_diffn !addn1 => /andP[lr rl] /andP[xlr rxl].
-    by rewrite ltnS -!maxnSS !geq_max leq_maxr !leq_max lr rxl leqnSn xll/= orbT.
-  move=> xlrd; have {}lxl: height l = (height (remove_subdef x l)).+1.
-    move: xll; rewrite leq_eqVlt => /orP; case=> [/eqP {}lxl|xll].
-      by move: xlrd lrd; rewrite lxl => /negP.
-    by apply/anti_leq/andP; split.
-  move: lrd xlrd; rewrite !geq_diffn !addn1 => /andP[] /[dup] lr /(leq_trans xll) -> rl.
-  rewrite /= -ltnNge /balance_node; case: (leq_diffn1P (height (remove_subdef x l)) (height r)) => //.
-  rewrite -lxl; move: rl; mk_conj => /anti_leq {xll lr} + _.
-  case: r rwf rb => [//|] rl rr rh rx/= /andP[]/andP[] /eqP -> rlwf _ /andP[]/andP[] rlrrd rlb rrb /eqP.
-  rewrite eqSS => /eqP; case: (ltnP _ _) => [rrrl|rlrr] hlE/=; last first.
-    move: rlrrd rlrr; rewrite hlE lxl !geq_diffn !addn1 !ltnS => /andP[] _ xlrl rlxl.
-    rewrite -!maxnSS maxnAC maxnn maxnAC maxnn xlb rlb rrb !andbT.
-    rewrite (maxn_idPr (leqnSn _)) !maxnSS !ltnS.
-    by rewrite (maxn_idPr xlrl) rlxl xlrl (leqW xlrl).
-  case: rl rlwf rlb rrrl rlrrd hlE => [//|] rll rlr rlh rlx/= /andP[]/andP[] /eqP -> {rlh} _ _ /andP[]/andP[] + -> -> + + /eqP.
-  rewrite diffnS !geq_diffn !addn1 !ltnS lxl eqSS maxnC => /andP[] rllrlr rlrrll + /andP[+ _]; mk_conj => /anti_leq -> /eqP <-.
-  rewrite maxnA maxnn -maxnA maxnn leqnSn (maxn_idPr (leqnSn _)) maxnn xlb rrb leqnSn leqnn/=; split=>//.
-  by rewrite !andbT -!maxnSS !leq_max !geq_max rllrlr rlrrll !leqnSn.
-- case /boolP: (diffn (height l) (height (remove_subdef x r)) <= 1) {xlb lxl xll}.
-    move=> /[dup] lxrd /balance_node_balanced' -> /=.
-    split; first by rewrite lxrd lb.
-    move: lrd lxrd; rewrite !geq_diffn !addn1 => /andP[lr rl] /andP[lxr xrl].
-    by rewrite ltnS -!maxnSS !geq_max leq_maxl !leq_max rl lxr leqnSn xrr/= orbT.
-  move=> lxrd; have {}rxr: height r = (height (remove_subdef x r)).+1.
-    move: xrr; rewrite leq_eqVlt => /orP; case=> [/eqP {}rxr|xrr].
-      by move: lxrd lrd; rewrite rxr => /negP.
-    by apply/anti_leq/andP; split.
-  move: lrd lxrd; rewrite !geq_diffn !addn1 => /andP[] lr /[dup] rl /(leq_trans xrr) ->.
-  rewrite /= andbT -ltnNge /balance_node; case: (leq_diffn1P (height l) (height (remove_subdef x r))) => //.
-  rewrite -rxr; move: lr; mk_conj => /anti_leq {xrr rl} + _.
-  case: l lwf lb => [//|] ll lr lh lx/= /andP[]/andP[] /eqP -> _ lrwf /andP[]/andP[] lllrd llb lrb /eqP.
-  rewrite eqSS => /eqP; case: (ltnP _ _) => [lllr|lrll] hrE/=; last first.
-    move: lllrd lrll; rewrite hrE rxr !geq_diffn !addn1 !ltnS => /andP[] xrll _ lrxr.
-    rewrite -!maxnSS maxnCA maxnn maxnCA maxnn xrb lrb llb !andbT.
-    rewrite (maxn_idPl (leqnSn _)) !maxnSS !ltnS.
-    by rewrite (maxn_idPl xrll) lrxr xrll (leqW xrll).
-  case: lr lrwf lrb lllr lllrd hrE => [//|] lrl lrr lrh lrx/= /andP[]/andP[] /eqP -> {lrh} _ _ /andP[]/andP[] + -> -> + + /eqP.
-  rewrite diffnS !geq_diffn !addn1 !ltnS rxr eqSS maxnC => /andP[] lrllrr lrrlrl + /andP[_]; mk_conj => /anti_leq -> /eqP <-.
-  rewrite maxnA maxnn -maxnA maxnn leqnSn (maxn_idPl (leqnSn _)) maxnn xrb llb leqnSn leqnn/=; split=>//.
-  by rewrite !andbT -!maxnSS !leq_max !geq_max lrllrr lrrlrl !leqnSn.
-- rewrite -pred_Sn; case: (ltnP _ _) => [lr|rl].
-    move: (pop_min_subdef r) (balanced_height_pop_min_subdef rwf rb) (pop_min_subdef0 r) => [pmr mr]/= [pmrb] /andP[] rpmr pmrr.
-    case: mr => [mr _ /=|]; last by rewrite eqxx => /esym/eqP ->; split.
-    move: lrd; rewrite !geq_diffn !addn1 lb pmrb => /andP[_].
-    move: lr; mk_conj => /anti_leq hrE.
-    move: rpmr; rewrite -hrE -pred_Sn => lpmr.
-    by rewrite -maxnSS leq_maxl geq_max leqnSn hrE (leqW lpmr) ltnS pmrr.
-  move: (pop_max_subdef l) (balanced_height_pop_max_subdef lwf lb) (pop_max_subdef0 l) => [pml ml]/= [pmlb] /andP[] lpml pmll.
-  case: ml => [ml _ /=|]; last by rewrite eqxx => /esym/eqP ->; split.
-  move: lrd; rewrite !geq_diffn !addn1 rb pmlb => /andP[lr _].
-  move: lpml; rewrite -ltnS => /(leq_trans (leqSpred (height l))) => lpml.
-  by rewrite (leq_trans pmll lr) (leq_trans rl lpml) ltnS -maxnSS leq_max lpml/= geq_max rl pmll.
-Qed.
-
-Lemma well_ordered_remove x t lb ub : well_ordered_subdef t lb ub -> well_ordered_subdef (remove_subdef x t) lb ub.
-Proof.
-elim: t lb ub => [//|] l xlwo r xrwo h xt lb ub/= /andP[]/andP[]/andP[] lbxt xtub /[dup] lwo /xlwo {}xlwo /[dup] rwo /xrwo {}xrwo.
-case /comparable_ltgtP: (comparableT x xt) => [xxt|xtx|xxt].
-- by apply/well_ordered_subdef_balance_node => /=; rewrite lbxt xtub xlwo.
-- by apply/well_ordered_subdef_balance_node => /=; rewrite lbxt xtub lwo.
-subst xt.
-case: (ltnP _ _) {xlwo xrwo} => _.
-  move: (pop_min_subdef r) (well_ordered_pop_min_subdef rwo) => [pmr mr]/=.
-  case: mr => [|//]mr []pmrwo []xmr mrub/=.
-  apply/andP; split=> //; apply/andP; split; last first.
-    by apply/(well_ordered_subdefWr _ lwo) => /=; apply/ltW.
-  apply/andP; split; last by case: ub mrub {rwo xtub pmrwo}.
-  by case: lb lbxt {lwo} => [|//]lb/= lbx; apply: (lt_trans lbx).
-move: (pop_max_subdef l) (well_ordered_pop_max_subdef lwo) => [pml ml]/=.
-case: ml => [|//]ml []pmlwo []lbml mlx/=.
-apply/andP; split; last first.
-  by apply/(well_ordered_subdefWl _ rwo) => /=; apply/ltW.
-apply/andP; split=> //; apply/andP; split; first by case: lb lbml {lwo lbxt pmlwo}.
-by case: ub xtub {rwo} => [|//]ub/=; apply/lt_trans.
-Qed.
-
-Lemma is_avl_remove x (t : t) : is_avl (remove_subdef x (val t)).
-Proof.
-case: t => t/= /andP[]/andP[] twf tb two; apply/andP; split; last exact/well_ordered_remove.
-by apply/andP; split; [apply/well_formed_remove|apply/balanced_remove].
-Qed.
-
-Definition remove x (t : t) : Def.t := exist _ (remove_subdef x (val t)) (is_avl_remove x t).
-
-Lemma mem_remove x y t : mem x (remove y t) = mem x t && (x != y).
-Proof.
-rewrite /mem/remove; case: t => /= t /andP[]/andP[] + _.
-elim: t => [//|] l IHl r IHr h xt /=; rewrite /well_ordered/= => /andP[]/andP[] _ {h} lwf rwf /andP[] lwo rwo.
-move: (well_ordered_subdefWr (ub':=None) erefl lwo) (well_ordered_subdefWl (lb':=None) erefl rwo) => lwo' rwo'.
-case /comparable_ltgtP: (comparableT y xt) => [yxt|xty|yxt].
-- rewrite mem_balance_node /well_ordered/=; last first.
-    by rewrite rwo andbT; apply/well_ordered_remove.
-  case /comparable_ltgtP: (comparableT x xt) => [xxt|xtx|->].
-  + by rewrite IHl.
-  + by move: (lt_trans yxt xtx); rewrite lt_neqAle eq_sym => /andP[] ->; rewrite andbT.
-  + by move: yxt; rewrite lt_neqAle eq_sym => /andP[] ->; rewrite andbT.
-- rewrite mem_balance_node /well_ordered/=; last first.
-    by rewrite lwo/=; apply/well_ordered_remove.
-  case /comparable_ltgtP: (comparableT x xt) => [xxt|xtx|->].
-  + by move: (lt_trans xxt xty); rewrite lt_neqAle eq_sym => /andP[] ->; rewrite andbT.
-  + by rewrite IHr.
-  + by move: xty; rewrite lt_neqAle eq_sym => /andP[] ->; rewrite andbT.
-subst y.
-case: (ltnP _ _) => [lr|rl].
-  move: (pop_min_subdef r)
-      (mem_pop_min_subdef x rwo')
-      (mem_pop_min_subdef' x rwo')
-      (pop_min_subdef0 r)
-      (well_ordered_pop_min_subdef rwo) => [pmr mr]/=.
-  case: mr => [mr xpmr xr _|_ _ /esym]/=; last by move: lr; rewrite eqxx => /[swap] /eqP ->.
-  move: xpmr xr; rewrite (inj_eq Some_inj) => xpmr xr []pmrwo []xtmr _.
-  have xl: mem_subdef x l -> (x < xt)%O by move=> /(mem_well_ordered_subdef lwo) [].
-  have xpmr': mem_subdef x pmr -> (mr < x)%O by move=> /(mem_well_ordered_subdef pmrwo) [].
-  case /comparable_ltgtP: (comparableT x xt) xpmr xr xl => [xxt|xtx|->]/= xpmr xr xl.
-  - by move: (lt_trans xxt xtmr) => /[dup]; rewrite {1}lt_neqAle eq_sym => /andP[] /negPf -> _ ->; rewrite andbT.
-  - case /comparable_ltgtP: (comparableT x mr) xpmr xr xpmr' => [xmr|//|->]/= xpmr xr xpmr'; last first.
-      by rewrite xr orbT.
-    case: (mem_subdef x l) xl => [/(_ erefl)//|_].
-    rewrite xr andbT orbF.
-    by case: (mem_subdef x pmr) xpmr' => [/(_ erefl)|].
-  - move: (xtmr); rewrite lt_neqAle => /andP[] /negPf -> _ /=.
-    case: (xt <= mr)%O; first by case: (mem_subdef xt l) xl => [/(_ erefl)|].
-    by apply/negP => /(mem_well_ordered_subdef pmrwo)/= [] /(lt_nsym xtmr).
-move: (pop_max_subdef l)
-    (mem_pop_max_subdef x lwo')
-    (mem_pop_max_subdef' x lwo')
-    (pop_max_subdef0 l)
-    (well_ordered_pop_max_subdef lwo) => [pml ml]/=.
-case: ml => [ml xpml xl _|_ _ /esym]/=; last first.
-  move: rl; rewrite eqxx => /[swap] /eqP -> /=.
-  case: r rwf {IHr rwo rwo'} => [_ _ _|rl rr rh rx /andP[]/andP[] /eqP -> //].
-  by rewrite if_same orbF andbN.
-move: xpml xl; rewrite (inj_eq Some_inj) => xpml xl []pmlwo [] _ mlxt.
-have xr: mem_subdef x r -> (xt < x)%O by move=> /(mem_well_ordered_subdef rwo) [].
-have xpml': mem_subdef x pml -> (x < ml)%O by move=> /(mem_well_ordered_subdef pmlwo) [].
-case /comparable_ltgtP: (comparableT x xt) xpml xl xr => [xxt|xtx|->]/= xpml xl xr.
-- case /comparable_ltgtP: (comparableT x ml) xpml xl xpml' => [//|xml|->]/= xpml xl xpml'; last first.
-    by rewrite xl orbT.
-  case: (mem_subdef x r) xr => [/(_ erefl)//|_].
-  rewrite xl andbT orbF.
-  by case: (mem_subdef x pml) xpml' => [/(_ erefl)|].
-- by move: (lt_trans mlxt xtx) => /[dup]; rewrite {1}lt_neqAle eq_sym leNgt => /andP[] /negPf -> /negPf ->; rewrite andbT.
-- move: (mlxt); rewrite lt_neqAle eq_sym leNgt => /[dup] /andP[] /negPf -> /negPf -> _ /=.
-  by case: (mem_subdef xt r) xr => [/(_ erefl)|].
-Qed.
-
-Definition elements t := (fix F t e :=
-  match t with
-  | leaf => e
-  | node l r _ x => F l (x :: (F r e))
-  end) t [::].
-
-Fixpoint min t :=
-  match t with
-  | leaf => None
-  | node l _ _ x => match min l with None => Some x | Some y => Some y end
-  end.
-
-Fixpoint max t :=
-  match t with
-  | leaf => None
-  | node _ r _ x => match max r with None => Some x | Some y => Some y end
-  end.
+Definition choose (s : t) := Subdef.choose (val s).
 
 End Def.
 
-Section Theory.
-
-Variables (d : unit) (elt : orderType d).
-Notation t := (t elt).
-
-  
-
-  
-  
+End Avl.
 
 
-  
-
-
-    
-
-
-
-
-End AVL.
