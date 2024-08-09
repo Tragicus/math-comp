@@ -1,4 +1,5 @@
-From Coq Require Import Uint63 PArray.
+From Coq Require Import PArray.
+From mathcomp Require Import ssreflect ssrbool ssrfun uint63.
 
 (******************************************************************************)
 (*                         Vectors (dynamic arrays)                           *)
@@ -21,10 +22,16 @@ Variables (T : Type).
 (* Invariant: size t <= length (as_array t). *)
 Record vector := {
   as_array : array T;
-  size : int
+  size : int;
+  sizeP : size <=? length as_array
 }.
 
-Definition make n x := Build_vector (make n x) n.
+Definition make (n : int) (x : T) : vector.
+apply/(@Build_vector (make n x) n).
+rewrite length_make.
+case: ifP.
+Search length make.
+Build_vector (make n x) n.
 
 Definition get t n := (as_array t).[n].
 
@@ -55,6 +62,15 @@ Definition set t n x :=
 Definition copy t := Build_vector (copy (as_array t)) (size t).
 
 Definition append t x :=
+  let s := size t in
+  let c := capacity t in
+  Build_vector
+    (as_array (if s <? c then t else reserve (c << 1) t)).[s <- x]
+    (s+1).
+
+Definition pop t :=
+  let s := (size t)
+
 
 
 End Def.
