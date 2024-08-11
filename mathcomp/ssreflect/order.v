@@ -1448,6 +1448,8 @@ End LiftedPOrder.
 
 Definition nondecreasing disp' (T' : porderType disp') (f : T -> T') : Prop :=
   {homo f : x y / x <= y}.
+Definition increasing disp' (T' : porderType disp') (f : T -> T') : Prop :=
+  {mono f : x y / x <= y}.
 
 End POrderDef.
 
@@ -5486,6 +5488,67 @@ Definition meet_morphism d (T : latticeType d) d' (T' : latticeType d')
 
 Definition join_morphism d (T : latticeType d) d' (T' : latticeType d')
   (f : T -> T') : Prop := {morph f : x y / x `|` y}.
+
+HB.mixin Record isOrderEmbedding d (T : porderType d) d' (T' : porderType d')
+    (apply : T -> T') := {
+  oembedding_le_subproof : increasing apply;
+}.
+
+HB.structure Definition OrderEmbedding d (T : porderType d)
+    d' (T' : porderType d') :=
+  {f of isOrderMorphism d T d' T' f & isOrderEmbedding d T d' T' f}.
+
+Module OrderEmbeddingExports.
+Notation "{ 'oembedding' T -> T' }" :=
+  (@OrderEmbedding.type _ T%type _ T'%type) : type_scope.
+End OrderEmbeddingExports.
+HB.export OrderEmbeddingExports.
+
+HB.builders Context d T d' T' f of isOrderEmbedding d T d' T' f. 
+Fact omorph_le : nondecreasing f.
+Proof. by move=> x y; rewrite oembedding_le_subproof. Qed.
+HB.instance Definition _ := isOrderMorphism.Build d T d' T' f omorph_le.
+HB.end.
+
+Module Import OrderEmbeddingTheory.
+Section OrderEmbeddingTheory.
+
+Section Properties.
+
+Variables (d : disp_t) (T : porderType d) (d' : disp_t) (T' : porderType d').
+Variables (f : OrderEmbedding.type T T').
+
+Lemma oembedding_le : {mono f : x y / x <= y}.
+Proof. exact: oembedding_le_subproof. Qed.
+
+Lemma oembedding_lt : {mono f : x y / x < y}.
+Proof. by move=> x y; rewrite !lt_leAnge !oembedding_le. Qed.
+
+End Properties.
+
+Section IdCompFun.
+
+Variables (d : disp_t) (T : porderType d) (d' : disp_t) (T' : porderType d').
+Variables (d'' : disp_t) (T'' : porderType d'').
+Variables (f : OrderEmbedding.type T' T'') (g : OrderEmbedding.type T T').
+
+Fact idfun_is_increasing : increasing (@idfun T).
+Proof. by []. Qed.
+#[export]
+HB.instance Definition _ := isOrderEmbedding.Build d T d T idfun
+  idfun_is_increasing.
+
+Fact comp_is_increasing : increasing (f \o g).
+Proof. by move=> ? ?; rewrite !oembedding_le. Qed.
+#[export]
+HB.instance Definition _ := isOrderEmbedding.Build d T d'' T'' (f \o g)
+  comp_is_increasing.
+
+End IdCompFun.
+
+End OrderEmbeddingTheory.
+End OrderEmbeddingTheory.
+
 
 HB.mixin Record isMeetLatticeMorphism d (T : latticeType d)
     d' (T' : latticeType d') (apply : T -> T') := {

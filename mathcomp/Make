@@ -95,6 +95,8 @@ ssreflect/ssrmatching.v
 ssreflect/ssrnat.v
 ssreflect/ssrnotations.v
 ssreflect/tuple.v
+ssreflect/uint63.v
+ssreflect/vector.v
 
 -I .
 -R . mathcomp
