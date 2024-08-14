@@ -4100,12 +4100,21 @@ HB.end.
 
 Module CancelPartial.
 Section CancelPartial.
-Variables (disp : disp_t) (T : Type).
+Variables (disp : disp_t) (T : choiceType).
 Variables (disp' : disp_t) (T' : porderType disp') (f : T -> T').
 Variables (f' : T' -> option T) (f_can : pcancel f f').
 
-Fact anti : antisymmetric (@Order.le disp (pcan_type f_can)).
+Fact anti : antisymmetric (PreCancelPartial.le f).
 Proof. by move=> ? ? /le_anti; apply: pcan_inj. Qed.
+
+Fact lt_def x y :
+  PreCancelPartial.lt f x y = (y != x) && PreCancelPartial.le f x y.
+Proof. by rewrite /PreCancelPartial.lt lt_def (inj_eq (pcan_inj f_can)). Qed.
+
+Set Debug "unification".
+Set Printing All.
+Definition Pcan := isPOrder.Build disp T
+  lt_def PreCancelPartial.refl anti PreCancelPartial.trans.
 
 HB.instance Definition _ :=
   Preorder_isPOrder.Build disp (pcan_type f_can) anti.
