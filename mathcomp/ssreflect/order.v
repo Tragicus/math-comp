@@ -4099,38 +4099,49 @@ HB.instance Definition _ := POrder_isTotal.Build disp T totalT.
 HB.end.
 
 Module CancelPartial.
+Import PreCancelPartial.
 Section CancelPartial.
 Variables (disp : disp_t) (T : choiceType).
 Variables (disp' : disp_t) (T' : porderType disp') (f : T -> T').
+
+Section Pcan.
 Variables (f' : T' -> option T) (f_can : pcancel f f').
 
-Fact anti : antisymmetric (PreCancelPartial.le f).
+Fact anti : antisymmetric (le f).
 Proof. by move=> ? ? /le_anti; apply: pcan_inj. Qed.
 
 Fact lt_def x y :
-  PreCancelPartial.lt f x y = (y != x) && PreCancelPartial.le f x y.
-Proof. by rewrite /PreCancelPartial.lt lt_def (inj_eq (pcan_inj f_can)). Qed.
+  lt f x y = (y != x) && le f x y.
+Proof. by rewrite /lt lt_def (inj_eq (pcan_inj f_can)). Qed.
 
-Set Debug "unification".
-Set Printing All.
-Definition Pcan := isPOrder.Build disp T
-  lt_def PreCancelPartial.refl anti PreCancelPartial.trans.
+Definition Pcan := isPOrder.Build disp (Choice.Pack (Choice.class T))
+  lt_def (@refl T disp' T' f) anti (@trans T disp' T' f).
 
-HB.instance Definition _ :=
-  Preorder_isPOrder.Build disp (pcan_type f_can) anti.
+End Pcan.
+
+Definition Can f' (f_can : cancel f f') := Pcan (can_pcan f_can).
 
 End CancelPartial.
 End CancelPartial.
-HB.export CancelPartial.
 
-HB.instance Definition _ (disp : disp_t) (T : Type)
- (disp' : disp_t) (T' : porderType disp') (f : T -> T')
- (f' : T' -> T) (f_can : cancel f f') :=
- Preorder_isPOrder.Build disp (can_type f_can)
-   (@CancelPartial.anti disp T disp' T' f _ (can_pcan f_can)).
+Notation PCanIsPartial := CancelPartial.Pcan.
+Notation CanIsPartial := CancelPartial.Can.
+
+#[export]
+HB.instance Definition _ (disp : disp_t) (T : choiceType)
+  (disp' : disp_t) (T' : porderType disp') (f : T -> T')
+  (f' : T' -> option T) (f_can : pcancel f f') :=
+  Preorder_isPOrder.Build disp (pcan_type f_can) (CancelPartial.anti f_can).
+
+#[export]
+HB.instance Definition _ (disp : disp_t) (T : choiceType)
+  (disp' : disp_t) (T' : porderType disp') (f : T -> T') (f' : T' ->  T)
+  (f_can : cancel f f') :=
+  Preorder_isPOrder.Build disp (can_type f_can)
+    (CancelPartial.anti (can_pcan f_can)).
 
 Section CancelTotal.
-Variables (disp : disp_t) (T : Type).
+Variables (disp : disp_t) (T : choiceType).
 Variables (disp' : disp_t) (T' : orderType disp') (f : T -> T').
 
 Section PCan.
@@ -4590,7 +4601,7 @@ HB.factory Record SubChoice_isSubPOrder d (T : porderType d) S (d' : disp_t) U
 HB.builders Context d T S d' U of SubChoice_isSubPOrder d T S d' U.
 HB.instance Definition _ := SubChoice_isSubPreorder.Build d T S d' U.
 HB.instance Definition _ := Preorder_isPOrder.Build d' U
-   (@CancelPartial.anti d' U d T _ _ (@valK _ _ U)).
+   (@CancelPartial.anti U d T _ _ (@valK _ _ U)).
 HB.end.
 
 #[export]
