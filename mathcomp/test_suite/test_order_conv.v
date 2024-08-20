@@ -1,8 +1,13 @@
 From mathcomp Require Import all_ssreflect.
 Import Order.Theory.
 
+From elpi Require Import elpi.
+Elpi Tactic foo.
 Section dual_of_dual.
 Context (disp : Order.disp_t).
+
+Let eq_dual_dual_preorderType (T : preorderType disp) :
+  Order.Preorder.on T = Order.Preorder.on T^d^d := erefl.
 
 Let eq_dual_dual_porderType (T : porderType disp) :
   Order.POrder.on T = Order.POrder.on T^d^d := erefl.
