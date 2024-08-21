@@ -999,6 +999,7 @@ Module Order.
 
 Export Order.
 
+#[key="T", primitive]
 HB.mixin Record Preorder_isDuallyPOrder (d : disp_t) T of Preorder d T := {
   le_anti  : antisymmetric (@le d T);
   ge_anti  : antisymmetric (fun x y => @le d T y x);
@@ -5609,6 +5610,18 @@ Lemma joinEprod x y : x `|` y = (x.1 `|` y.1, x.2 `|` y.2). Proof. by []. Qed.
 End JoinSemilattice.
 
 (* FIXME: use HB.saturate *)
+#[export]
+HB.instance Definition _ (disp1 disp2 disp3 : disp_t)
+  (T1 : bPOrderType disp1) (T2 : bPOrderType disp2) :=
+  POrder.on (type disp3 T1 T2).
+#[export]
+HB.instance Definition _ (disp1 disp2 disp3 : disp_t)
+  (T1 : tPOrderType disp1) (T2 : tPOrderType disp2) :=
+  POrder.on (type disp3 T1 T2).
+#[export]
+HB.instance Definition _ (disp1 disp2 disp3 : disp_t)
+  (T1 : tbPOrderType disp1) (T2 : tbPOrderType disp2) :=
+  POrder.on (type disp3 T1 T2).
 #[export]
 HB.instance Definition _ (disp1 disp2 disp3 : disp_t)
   (T1 : bMeetSemilatticeType disp1) (T2 : bMeetSemilatticeType disp2) :=
