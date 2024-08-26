@@ -5916,13 +5916,6 @@ HB.instance Definition _ (T1 : tPOrderType disp1) (T2 : tPOrderType disp2) :=
   TPOrder.copy (T1 * T2)%type (prod T1 T2).
 HB.instance Definition _ (T1 : tbPOrderType disp1) (T2 : tbPOrderType disp2) :=
   TBPOrder.copy (T1 * T2)%type (prod T1 T2).
-HB.instance Definition _ (T1 : latticeType disp1) (T2 : latticeType disp2) :=
-  Lattice.copy (T1 * T2)%type (prod T1 T2).
-HB.instance Definition _ (T1 : bLatticeType disp1) (T2 : bLatticeType disp2) :=
-  BLattice.copy (T1 * T2)%type (prod T1 T2).
-HB.instance Definition _
-  (T1 : tbLatticeType disp1) (T2 : tbLatticeType disp2) :=
-  TBLattice.copy (T1 * T2)%type (prod T1 T2).
 HB.instance Definition _
   (T1 : meetSemilatticeType disp1) (T2 : meetSemilatticeType disp2) :=
   MeetSemilattice.copy (T1 * T2)%type (prod T1 T2).

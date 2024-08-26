@@ -169,11 +169,6 @@ Let eq_dual_prod_tbPOrderType
   (T1 : tbPOrderType disp1) (T2 : tbPOrderType disp2) :
   Order.TBPOrder.on (T1 * T2)^d = Order.TBPOrder.on (T1^d * T2^d)%type := erefl.
 
-Check fun  (T1 : meetSemilatticeType disp1) (T2 : meetSemilatticeType disp2)  =>
-  (T1 * T2)%type : porderType _.
-Fail Check fun  (T1 : meetSemilatticeType disp1) (T2 : meetSemilatticeType disp2)  =>
-  (T1 * T2)%type : meetSemilatticeType _.
-
 Let eq_dual_prod_meetSemilatticeType
   (T1 : meetSemilatticeType disp1) (T2 : meetSemilatticeType disp2) :
   Order.MeetSemilattice.on (T1 * T2)^d
