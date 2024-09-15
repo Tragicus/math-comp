@@ -8,10 +8,10 @@ Unset Printing Implicit Defensive.
 Local Open Scope order_scope.
 Local Open Scope nat_scope.
 
-Import Order.PreorderTheory Order.POrderTheory Order.TotalTheory Order.LatticeTheoryMeet Order.LatticeTheoryJoin.
+Import Order.POrderTheory Order.TotalTheory Order.LatticeTheoryMeet Order.LatticeTheoryJoin.
 
 Ltac mp :=
-  match goal with
+match goal with
   | |- (?x -> _) -> _ => have /[swap]/[apply]: x
   end.
 
@@ -526,9 +526,9 @@ Definition try_join l x r :=
   else union l (add x r).
 
 Definition try_concat l r :=
-  match l, r with
-  | leaf, s | s, leaf => s
-  | _, _ =>
+  match l with
+  | leaf => r
+  | _ =>
     match min r with
     | None => l
     | Some mr => try_join l mr (remove_min r)
@@ -2367,8 +2367,122 @@ by rewrite andbT; apply/(lt_le_trans xmr).
 Qed.
 
 Lemma well_formed_try_concat l r : well_formed l -> well_formed r -> well_formed (try_concat l r).
+Proof.
+rewrite /try_concat.
+case: l => [//|ll lx lr lh] lwf rwf.
+case: (min r) => [m|//].
+apply/well_formed_try_join => //.
+exact/well_formed_remove_min.
+Qed.
+
+Lemma balanced_try_concat l r : well_formed l -> well_formed r -> balanced l -> balanced r -> balanced (try_concat l r).
+Proof.
+rewrite /try_concat.
+case: l => [//|ll lx lr lh] lwf rwf lb rb.
+case: (min r) => [m|//].
+apply/balanced_try_join => //.
+  exact/well_formed_remove_min.
+exact/balanced_remove_min.
+Qed.
+
+Lemma well_ordered_try_concat l r itv : well_ordered l itv -> well_ordered r itv -> well_ordered (try_concat l r) itv.
+Proof.
+rewrite /try_concat.
+case: l => [//|ll lx lr lh] lwo rwo.
+have /well_ordered_remove_min: well_ordered r (Interval -oo itv.2).
+  by apply/(well_orderedW _ rwo); rewrite subitvE/=.
+case: (min r) (mem_min (well_orderedWT rwo)) => [m|//]/= /(mem_well_ordered rwo) mitv rwo'.
+apply/well_ordered_try_join => //.
+apply/(well_orderedW _ rwo'); rewrite subitvE/= lexx andbT.
+move: mitv; rewrite itv_boundlr => /andP[] + _.
+by rewrite -ltBRight_leBLeft => /ltW.
+Qed.
+
+Lemma mem_try_concat x l r : well_formed l -> well_formed r -> balanced l -> balanced r -> well_ordered l `]-oo, +oo[ -> well_ordered r `]-oo, +oo[ ->
+  mem (try_concat l r) x = mem l x || mem r x.
+Proof.
+rewrite /try_concat.
+case: l => [//|ll lx lr lh] lwf rwf lb rb lwo rwo.
+rewrite (mem_remove_min' x rwo).
+case: (min r) (mem_min rwo) => [m _|/eqP ->]/=; last by rewrite orbF.
+rewrite mem_try_join//=.
+- rewrite (inj_eq Some_inj); move: ((x == lx) || _) => b.
+  by rewrite orbCA orbA.
+- exact/well_formed_remove_min.
+- exact/balanced_remove_min.
+- by move: (well_ordered_remove_min rwo); apply/well_orderedWT.
+Qed.
 
 End Theory.
+
+Section Theory2.
+Variables (d d' : unit) (elt : orderType d) (elt' : orderType d').
+
+Lemma well_formed_map (f : elt -> elt') s : well_formed s -> well_formed (map f s).
+Proof.
+elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[_] lwf rwf.
+apply/well_formed_try_join.
+  exact/IHl.
+exact/IHr.
+Qed.
+
+Lemma balanced_map (f : elt -> elt') s : well_formed s -> balanced s -> balanced (map f s).
+Proof.
+elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[_] lwf rwf /andP[]/andP[_] lb rb.
+apply/balanced_try_join; try exact/well_formed_map.
+  exact/IHl.
+exact/IHr.
+Qed.
+
+Lemma well_ordered_map (f : elt -> elt') s itv itv' : (forall x, x \in itv -> f x \in itv') -> well_ordered s itv -> well_ordered (map f s) itv'.
+Proof.
+move=> fI; elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[] xI lwo rwo.
+apply/well_ordered_try_join.
+- exact/fI.
+- apply/IHl/(well_orderedW _ lwo).
+  rewrite subitvE/= lexx/=.
+  by move: xI; rewrite itv_boundlr leBRight_ltBLeft => /andP[_] /ltW.
+apply/IHr/(well_orderedW _ rwo).
+rewrite subitvE/= lexx andbT.
+by move: xI; rewrite itv_boundlr -ltBRight_leBLeft => /andP[] /ltW.
+Qed.
+
+Lemma mem_map (f : elt -> elt') s x : well_formed s -> balanced s -> well_ordered s `]-oo, +oo[ ->
+  reflect (exists y, mem s y /\ x = f y) (mem (map f s) x).
+Proof.
+move=> swf sb swo.
+elim: s swf sb swo x => [_ _ _ x|l IHl y r IHr h]/=; first by apply/Bool.ReflectF => -[y] [].
+move=> /andP[]/andP[_] lwf rwf /andP[]/andP[_] lb rb /andP[] lwo rwo x.
+move: (well_orderedWT lwo) (well_orderedWT rwo) => lwo' rwo'.
+rewrite mem_try_join; first last.
+- exact/(well_ordered_map _ rwo').
+- exact/(well_ordered_map _ lwo').
+- exact/balanced_map.
+- exact/balanced_map.
+- exact/well_formed_map.
+- exact/well_formed_map.
+move: IHl => /(_ lwf lb lwo') IHl.
+move: IHr => /(_ rwf rb rwo') IHr.
+apply/(iffP idP).
+  move=> /orP; case=> [/orP[/eqP xy|/IHl[z][] zl ->]|/IHr[z][] zr ->].
+  - by exists y; rewrite eqxx.
+  - exists z.
+    move: (mem_well_ordered lwo zl); rewrite itv_boundlr/= bnd_simp => ->.
+    by rewrite zl orbT.
+  - exists z.
+    move: (mem_well_ordered rwo zr); rewrite itv_boundlr andbT bnd_simp => /ltW.
+    rewrite leNgt => /negPf ->.
+    by rewrite zr orbT.
+move=> [z] [+] -> => /orP[/eqP ->|].
+  by rewrite eqxx.
+case: (_ < _)%O => [zl|zr]; apply/orP.
+  by left; apply/orP; right; apply/IHl; exists z.
+by right; apply/IHr; exists z.
+Qed.
+    
+  
+
+
 
 Module AllExports. HB.reexport. End AllExports.
 
