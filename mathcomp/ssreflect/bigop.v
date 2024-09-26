@@ -2331,7 +2331,7 @@ Proof.
 move=> prs; rewrite !(bigID [pred i | F i == idx] P F)/=.
 rewrite big1 ?Monoid.mul1m; last by move=> i /andP[_ /eqP->].
 rewrite [in RHS]big1 ?Monoid.mul1m; last by move=> i /andP[_ /eqP->].
-by rewrite -[in LHS]big_filter -[in RHS]big_filter; apply perm_big.
+by rewrite -[in LHS]big_filter -[in RHS]big_filter; apply/perm_big.
 Qed.
 
 Lemma perm_big_supp [r s : seq I] [P : pred I] (F : I -> R) :

@@ -747,7 +747,7 @@ Lemma aspaceOverP (E_F : {subfield L_F}) :
 Proof.
 have [V [defEF modV memV]] := vspaceOverP E_F.
 have algE: has_algid V && (V * V <= V)%VS.
-  rewrite has_algid1; last by rewrite -memV mem1v.
+  rewrite has_algid1; last by rewrite -memV (mem1v (L:=fieldOver F)).
   by apply/prodvP=> u v; rewrite -!memV; apply: memvM.
 by exists (ASpace algE); rewrite -sup_field_module; split; first apply: val_inj.
 Qed.
@@ -828,7 +828,7 @@ Let F0ZEZ a x v : a *: ((x *: v : L) : L0)  = (a *: x) *: v.
 Proof. by rewrite [a *: _]scalerA -scalerAl mul1r. Qed.
 
 Let baseVspace_basis V : seq L0 :=
-  [seq tnth bF ij.2 *: tnth (vbasis V) ij.1 | ij : 'I_(\dim V) * 'I_n].
+  [seq tnth bF ij.2 *: tnth (vbasis V) ij.1 | ij : 'I_(\dim V) * 'I_n] : seq L.
 Definition baseVspace V := <<baseVspace_basis V>>%VS.
 
 Lemma mem_baseVspace V : baseVspace V =i V.

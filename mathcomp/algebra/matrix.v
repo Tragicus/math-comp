@@ -2596,7 +2596,7 @@ Lemma pid_mx_block m n r : pid_mx r = block_mx 1%:M 0 0 0 :> 'M_(r + m, r + n).
 Proof.
 apply/matrixP=> i j; rewrite !mxE row_mx0 andbC.
 do ![case: split_ordP => ? -> /[!mxE]//].
-by rewrite (val_eqE (lshift n _)) eq_shift.
+by rewrite [_ == _]eq_shift.
 Qed.
 
 Lemma tr_pid_mx m n r : (pid_mx r)^T = pid_mx r :> 'M_(n, m).

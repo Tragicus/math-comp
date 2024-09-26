@@ -533,7 +533,7 @@ have{irr_q} [Lz [inLz [z qz0]]]: {Lz : fieldExtType F &
   {inLz : 'AHom(L, Lz) & {z : Lz | root (map_poly inLz q) z}}}.
 - have [Lz0 _ [z qz0 defLz]] := irredp_FAdjoin irr_q.
   pose Lz : fieldExtType _ := baseFieldType Lz0.
-  pose inLz : {rmorphism L -> Lz} := in_alg Lz0.
+  pose inLz : {rmorphism L -> Lz} := (in_alg Lz0 : {rmorphism L -> Lz0}).
   have inLzL_linear: linear (locked inLz).
     by move=> a u v; rewrite -[in LHS]mulr_algl rmorphD rmorphM -lock mulr_algl.
   pose inLzLlM := GRing.isLinear.Build _ _ _ _ _ inLzL_linear.
