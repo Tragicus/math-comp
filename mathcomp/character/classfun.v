@@ -1773,7 +1773,7 @@ Lemma sub_cfker_mod (A : {set gT}) K (psi : 'CF(G / K)) :
     K <| G -> A \subset 'N(K) ->
   (A \subset cfker (psi %% K)) = (A / K \subset cfker psi)%g.
 Proof.
-by move=> nsKG nKA; rewrite -(quotientSGK nKA) ?quotient_cfker_mod ?cfker_mod.
+by move=> nsKG nKA; rewrite -(quotientSGK nKA) ?quotient_cfker_mod// cfker_mod.
 Qed.
 
 Lemma cfker_quo H phi :
@@ -1797,7 +1797,7 @@ Lemma cfResQuo H K phi :
 Proof.
 move=> kerK sKH sHG; apply/cfun_inP=> xb Hxb; rewrite cfResE ?quotientS //.
 have{xb Hxb} [x nKx Hx ->] := morphimP Hxb.
-by rewrite !cfQuoEnorm ?cfResE ?sub_cfker_Res // inE ?Hx ?(subsetP sHG).
+by rewrite !cfQuoEnorm ?cfResE // ?sub_cfker_Res // inE ?Hx ?(subsetP sHG).
 Qed.
 
 Lemma cfQuoInorm K phi :

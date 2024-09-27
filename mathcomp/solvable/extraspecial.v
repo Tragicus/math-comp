@@ -277,6 +277,7 @@ have oG := card_pX1p2 p_pr; have esG := pX1p2_extraspecial p_pr.
 have oZ := card_center_extraspecial pG esG.
 elim: n => [|n IHn]; first by rewrite (card_isog (ncprod0 _)) oZ.
 case: pX1p2S => gz isoZ; rewrite -im_cpair cardMg_divn setI_im_cpair.
+(* TODO: investigate why this is slow. *)
 rewrite -injm_center ?{1}card_injm ?injm_cpairg1 ?injm_cpair1g ?center_sub //.
 by rewrite oG oZ IHn -expnD mulKn ?prime_gt0.
 Qed.

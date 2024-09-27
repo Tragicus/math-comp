@@ -418,7 +418,7 @@ Proof. by apply/cfclassP; exists 1%g => //; rewrite cfConjgJ1. Qed.
 Lemma cfclass_transr phi psi :
   (psi \in phi ^: G)%CF -> (phi ^: G =i psi ^: G)%CF.
 Proof.
-rewrite -cfclassInorm; case/cfclassP=> x Gx -> xi; rewrite -!cfclassInorm.
+rewrite -cfclassInorm; case/cfclassP=> x Gx -> xi; rewrite -2!cfclassInorm.
 have nHN: {subset 'N_G(H) <= 'N(H)} by apply/subsetP; apply: subsetIr.
 apply/cfclassP/cfclassP=> [[y Gy ->] | [y Gy ->]].
   by exists (x^-1 * y)%g; rewrite -?cfConjgMnorm ?groupM ?groupV ?nHN // mulKVg.
@@ -926,7 +926,9 @@ have [sHG sTG]: H \subset G /\ T \subset G by rewrite subsetIl normal_sub.
 have nsHT : H <| T := normal_Inertia theta sHG; have sHT := normal_sub nsHT.
 have AtoB_P s (psi := 'chi_s) (chi := 'Ind[G] psi): s \in calA ->
   [/\ chi \in irr G, AtoB s \in calB & '['Res psi, theta] = '['Res chi, theta]].
-- rewrite !constt_Ind_Res => sHt; have [r sGr] := constt_cfInd_irr s sTG.
+  (* TODO: 25s without the patch, to investigate... *)
+- rewrite constt_Ind_Res [_ \in calB]constt_Ind_Res.
+  move=> sHt; have [r sGr] := constt_cfInd_irr s sTG.
   have rTs: s \in irr_constt ('Res[T] 'chi_r) by rewrite -constt_Ind_Res.
   have NrT: 'Res[T] 'chi_r \is a character by rewrite cfRes_char ?irr_char.
   have rHt: t \in irr_constt ('Res[H] 'chi_r).
@@ -1154,7 +1156,7 @@ have [defKT | ltKT_K] := eqVneq (K :&: T) K; last first.
     by rewrite Dth1 => ->; rewrite !mul0r.
   rewrite -leC_nat -(ler_pM2r (gt0CiG K L)) -/t -(ler_pM2r (irr1_gt0 p0)).
   rewrite mul1r -Dth1 -cfInd1 //.
-  by rewrite char1_ge_constt ?cfInd_char ?irr_char ?constt_Ind_Res.
+  by rewrite char1_ge_constt ?cfInd_char ?irr_char// constt_Ind_Res.
 have IKphi: 'I_K[phi] = K by rewrite -{1}(setIidPl sKG) -setIA.
 have{} DthL: 'Res[L] theta = e%:R *: phi.
   by rewrite DthL -[rhs in (_ ^: rhs)%CF]IKphi cfclass_inertia big_seq1.
