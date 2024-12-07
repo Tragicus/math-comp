@@ -1,8 +1,30 @@
 From Coq Require Import PArray.
-From mathcomp Require Import ssreflect ssrbool ssrfun eqtype order ssralg uint63.
+From HB Require Import structures.
+From mathcomp Require Import ssreflect ssrbool ssrfun eqtype order ssralg uint63 pointed.
 
 (******************************************************************************)
 (*                         Vectors (dynamic arrays)                           *)
+(*                                                                            *)
+(* Efficient dynamic data structure for storing arrays of objects. The        *)
+(* elements of a vector need to come from a pointedType, lest the equality    *)
+(* operator fails to compare equal vectors because they were created with     *)
+(* different default elements.                                                *)
+(*                                                                            *)
+(* Operations:                                                                *)
+(*    capacity t == maximum number of elements the vector t can hold before   *)
+(*                  adding one results in a reallocation                      *)
+(*        size t == number of elements in t                                   *)
+(*      make n x == vector containing n elements equal to x                   *)
+(*       get t n == the n-th element of t, or (default t) when size t <= n    *)
+(*      move t s == copies t into s                                           *)
+(*   reserve n t == sets the capacity of t to n, resizing t if needed         *)
+(*     set t n x == sets the n-th element of t to x, increasing the size of t *)
+(*                  if necessary                                              *)
+(*        copy t == returns a copy of t                                       *)
+(*    append t x == adds an element x at the end of t, increasing its size by *)
+(*                  1                                                         *)
+(*    pop_back t == removes the last element of t, actually shrinking t only  *)
+(*                  when it is sufficiently empty                             *)
 (******************************************************************************)
 
 Set Implicit Arguments.
@@ -18,10 +40,11 @@ Local Open Scope uint63_scope.
 Local Open Scope array_scope.
 Local Open Scope vect_scope.
 
-Import Order.Def Order.POrderTheory Order.TotalTheory.
+Import Order.Def Order.POrderTheory Order.TotalTheory Order.OrderEmbeddingTheory.
+Import Order.BPOrderTheory Order.TPOrderTheory GRing.Theory.
 
 Section Def.
-Variables (T : Type).
+Variables (T : pointedType).
 
 (* Invariant: size t <= length (as_array t). *)
 Record vector := {
@@ -43,12 +66,12 @@ by rewrite /= length_make -[leb _ _]/(@Order.le _ uint63 _ _)
   [X in if X then _ else _]ge_min lexx orbT.
 Qed.
 
-Definition make (n : uint63) (x : T) := Build_vector (make_subproof n x).
+Definition make (n : uint63) := Build_vector (make_subproof n pt).
 
-Lemma size_make n x : size (make n x) = min n max_length.
+Lemma size_make n : size (make n) = min n max_length.
 Proof. by []. Qed.
 
-Lemma capacity_make n x : capacity (make n x) = min n max_length.
+Lemma capacity_make n : capacity (make n) = min n max_length.
 Proof.
 rewrite /capacity/= length_make.
 suff ->: min n max_length ≤? max_length by [].
@@ -132,35 +155,50 @@ Definition append t x := set t (size t) x.
 Require Import ssrnat.
 Import Order.OrderEmbeddingTheory.
 
-Lemma lt_predu (x y : uint63) : x < y -> (y - 1 : uint63) < y.
-Proof.
-rewrite -!(oembedding_lt to_nat) => xy/=.
-suff ->: to_nat (y - 1) = (to_nat y).-1.
-  by rewrite /Order.lt/= prednK//; apply/(leq_ltn_trans _ xy).
-rewrite /=/to_nat/= sub_spec -Znat.Z2Nat.inj_pred BinInt.Z.sub_1_r.
-rewrite Zdiv.Zmod_small//.
-case: (to_Z_bounded y) => y0 /BinInt.Z.lt_lt_pred ywB.
-split=> //.
-apply/BinInt.Z.lt_le_pred/Znat.Z2Nat.inj_lt => //=.
-exact/ltP/(leq_ltn_trans _ xy).
-Qed.
-
 Lemma pop_back_subproof t :
   (0 : uint63) < size t -> (size t) - 1 <= length (as_array t) :> uint63.
 Proof. by move=> t0; apply/(le_trans _ (sizeP t))/(ltW (lt_predu t0)). Qed.
 
 Definition pop_back t :=
   let s := size t in
-  let c : uint63 := lsr (capacity t) 1 in
-  if (s - 1 : uint63) <= c then reserve c t else
-    (if (0 : uint63) < s as b return ((0 : uint63) < s = b -> vector)
-    then fun sgt => Build_vector (pop_back_subproof sgt)
-    else fun=> t) erefl.
+  (if (0 : uint63) < s as b return ((0 : uint63) < s = b -> vector)
+  then fun sgt =>
+    let t := Build_vector (pop_back_subproof sgt) in
+    let c : uint63 := (capacity t) / 3 in
+    if (s - 1 : uint63) <= c then reserve c t else t
+  else fun=> t) erefl.
 
 Lemma size_pop_back t : size (pop_back t) = min (size t) (size t - 1).
 Proof.
-rewrite /pop_back/=; case: ifP => [cs|_].
-  rewrite size_reserve cs.
-
+rewrite /pop_back/=.
+move: erefl; case: {2 3}((0 : uint63) < size t) => [t0|]; last first.
+  move=> /(introT negPf); rewrite lt0x negbK => /eqP ->.
+  exact/esym/min_idPl/le0x.
+rewrite (min_idPr (ltW (lt_predu t0))).
+case: ifP => /= [cs|_ //].
+by rewrite size_reserve/=; apply/min_idPr. 
+Qed.
 
 End Def.
+
+Notation "t '.[' n ']'" := (get t n) : vect_scope.
+Notation "t '.[' n '<-' x ']'" := (set t n x) : vect_scope.
+
+Section Equality.
+Variable (T : ptEqType).
+
+(* FIXME: It would be slightly more efficient to stop the loop at the first
+  false. *)
+Definition eq_op (t u : vector T) :=
+  (size t == size u) && iteri (size t) (fun i b => b && (t.[i] == u.[i])) true.
+
+Lemma eqP : Equality.axiom eq_op.
+Proof.
+move=> t u; apply/(iffP andP) => [|->]; last first.
+  split=> //.
+  by rewrite (eq_iteri (g:=fun=> id)) ?iteri_id//= => i _ j; rewrite eqxx andbT.
+move: t u => [] t ts tsP [] u us usP/= [] /eqP tus tu.
+split.
+apply array_ext.
+Search array.
+

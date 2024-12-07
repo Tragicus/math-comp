@@ -203,6 +203,31 @@ HB.instance Definition _ :=
 HB.instance Definition _ := Order.isOrderEmbedding.Build
   uint63_display uint63 Order.NatOrder.nat_display nat to_nat Order.le_to_nat.
 
+Lemma ltuS {i j : uint63} : (i < j -> i < i + 1)%O.
+Proof.
+case: (to_Z_bounded i) (to_Z_bounded j) => i0 _ [] j0 jwB.
+rewrite -!(oembedding_lt to_nat) => /ssrnat.ltP/inj_lt.
+rewrite !Z2Nat.id// => /Ztac.Zlt_le_add_1 ij.
+rewrite /={2}/to_nat/= add_spec Z.mod_small.
+  rewrite Z2Nat.inj_add// Nat.add_1_r.
+  by rewrite /Order.lt/=.
+split; first exact/Z.add_nonneg_nonneg.
+exact: Z.le_lt_trans jwB.
+Qed.
+
+Lemma lt_predu (x y : uint63) : (x < y -> (y - 1 : uint63) < y)%O.
+Proof.
+rewrite -!(oembedding_lt to_nat) => xy/=.
+suff ->: to_nat (y - 1) = (to_nat y).-1.
+  by rewrite /Order.lt/= prednK//; apply/(leq_ltn_trans _ xy).
+rewrite /=/to_nat/= sub_spec -Znat.Z2Nat.inj_pred BinInt.Z.sub_1_r.
+rewrite Zdiv.Zmod_small//.
+case: (to_Z_bounded y) => y0 /BinInt.Z.lt_lt_pred ywB.
+split=> //.
+apply/BinInt.Z.lt_le_pred/Znat.Z2Nat.inj_lt => //=.
+exact/ssrnat.ltP/(leq_ltn_trans _ xy).
+Qed.
+
 Module Ring.
 
 Lemma addrA : associative add.
@@ -266,18 +291,6 @@ HB.instance Definition _ :=
 HB.instance Definition _ :=
   GRing.Zmodule_isComRing.Build uint63
     Ring.mulrA Ring.mulrC Ring.mul1r Ring.mulrDl Ring.oner_neq0.
-
-Lemma ltuS {i j : uint63} : (i < j -> i < i + 1)%O.
-Proof.
-case: (to_Z_bounded i) (to_Z_bounded j) => i0 _ [] j0 jwB.
-rewrite -!(oembedding_lt to_nat) => /ssrnat.ltP/inj_lt.
-rewrite !Z2Nat.id// => /Ztac.Zlt_le_add_1 ij.
-rewrite /={2}/to_nat/= add_spec Z.mod_small.
-  rewrite Z2Nat.inj_add// Nat.add_1_r.
-  by rewrite /Order.lt/=.
-split; first exact/Z.add_nonneg_nonneg.
-exact: Z.le_lt_trans jwB.
-Qed.
 
 (* Program Fixpoint is too painful, let's use Acc instead. *)
 (* FIXME: `comparable_leP` will probably block the extraction. *)
@@ -390,3 +403,29 @@ apply/Pf.
 by apply: IHk => y m mk; apply/Pf/(leq_trans mk).
 Qed.
 
+Lemma iteri_ind2 (T U : Type) (P : T -> U -> Prop)
+    (n : uint63) (f : uint63 -> T -> T) (g : uint63 -> U -> U) (x : T) (y : U):
+  P x y ->
+  (forall x' y' (m : uint63), (m < n)%O -> P x' y' -> P (f m x') (g m y')) ->
+  P (iteri n f x) (iteri n g y).
+Proof.
+move=> Px Pf.
+have {Pf}: forall x' y' m , (to_nat m < to_nat n) -> P x' y' -> P (f m x') (g m y').
+  by move=> x' y' m mn; apply: Pf; rewrite -(oembedding_lt to_nat)/=.
+rewrite !iteriE; elim: (to_nat n) => //= k IHk Pf.
+apply/Pf.
+  rewrite /to_nat /of_nat/= of_Z_spec Z2Nat.inj_mod//; last exact: Zle_0_nat.
+  by rewrite ltnS Nat2Z.id; apply/ssrnat.leP/Nat.Div0.mod_le.
+by apply: IHk => x' y' m mk; apply/Pf/(leq_trans mk).
+Qed.
+
+Lemma eq_iteri (T : Type) (n : uint63) (f g : uint63 -> T -> T) (x : T) :
+  (forall i, (i < n)%O -> f i =1 g i) -> iteri n f x = iteri n g x.
+Proof.
+move=> /= fg.
+apply: (iteri_ind2 (P:=fun x y => x = y)) => // x' y' m mn ->.
+exact: fg.
+Qed.
+
+Lemma iteri_id (T : Type) (n : uint63) (x : T) : iteri n (fun=> id) x = x.
+Proof. exact: (iteri_ind (P:=fun y => y = x)). Qed.

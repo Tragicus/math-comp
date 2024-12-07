@@ -85,6 +85,7 @@ ssreflect/fintype.v
 ssreflect/generic_quotient.v
 ssreflect/order.v
 ssreflect/path.v
+ssreflect/pointed.v
 ssreflect/prime.v
 ssreflect/seq.v
 ssreflect/ssrAC.v
