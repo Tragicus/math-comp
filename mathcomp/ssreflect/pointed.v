@@ -30,4 +30,6 @@ HB.instance Definition _ T := hasPt.Build (option T) None.
 HB.instance Definition _ (T1 T2 : pointedType) :=
   hasPt.Build (T1 + T2)%type (inl pt).
 
+Definition pointed_at (T : Type) (pt : T) := T.
 
+HB.instance Definition _ (T : Type) (pt : T) := hasPt.Build (pointed_at pt) pt.
