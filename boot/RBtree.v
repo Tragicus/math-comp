@@ -8,26 +8,31 @@ Unset Printing Implicit Defensive.
 Local Open Scope order_scope.
 Local Open Scope nat_scope.
 
-Import Order.POrderTheory Order.TotalTheory Order.LatticeTheoryMeet Order.LatticeTheoryJoin.
+Import Order.POrderTheory Order.TotalTheory.
 
-Lemma itvI (d' : unit) (T : orderType d') (a b c d : itv_bound T) :
+Lemma itvI d' (T : orderType d') (a b c d : itv_bound T) :
   Interval a b `&` Interval c d = Interval (a `|` c) (b `&` d).
 Proof. by []. Qed.
 
-Lemma subitvE (disp : unit) (T : porderType disp) (itv itv' : interval T) :
+Lemma subitvE disp (T : porderType disp) (itv itv' : interval T) :
   ((itv <= itv') = (itv'.1 <= itv.1) && (itv.2 <= itv'.2))%O.
 Proof. by case: itv; case: itv'. Qed.
 
-Lemma itv_boundlr (disp : unit) (T : porderType disp) (itv : interval T) (x : T) :
+Lemma itv_boundlr disp (T : porderType disp) (itv : interval T) (x : T) :
   x \in itv = (itv.1 <= BLeft x)%O && (BRight x <= itv.2)%O.
 Proof. by case: itv. Qed.
+
+Lemma ifC T a b (x y z t : T) :
+  (if a then if b then x else y else if b then z else t) =
+  if b then if a then x else z else if a then y else t.
+Proof. by case: a; case: b. Qed.
 
 Module RBtree.
 
 Module Subdef.
 
 Section Def.
-Variables (d : unit) (elt : orderType d).
+Variables (d : Order.disp_t) (elt : orderType d).
 
 Inductive t : Type :=
   | leaf
@@ -68,11 +73,12 @@ Fixpoint black_height s :=
       (black_height l)
   end.
 
-Fixpoint well_formed s :=
+(* well_formed c s checks that there are no two consecutive red nodes in the tree where s is the child of a root of color c. *)
+Fixpoint well_formed c s :=
   match s with
   | leaf => true
-  | node l _ r c =>
-      (c ==> ~~ (is_red l) && ~~ (is_red r)) && well_formed l && well_formed r
+  | node l _ r c' =>
+      ~~ (c && c') && well_formed c' l && well_formed c' r
   end.
 
 Fixpoint well_ordered s (itv : interval elt) := 
@@ -81,7 +87,7 @@ Fixpoint well_ordered s (itv : interval elt) :=
   | node l x r _ => (x \in itv) && (well_ordered l (Interval itv.1 (BLeft x))) && (well_ordered r (Interval (BRight x) itv.2))
   end.
 
-Definition is_rb (s : t) := ~~ is_red s && (black_height s != None) && well_formed s && well_ordered s `]-oo, +oo[.
+Definition is_rb (s : t) := (black_height s != None) && well_formed true s && well_ordered s `]-oo, +oo[.
 
 Definition create l x r := node l x r false.
 Arguments create : simpl never.
@@ -110,12 +116,6 @@ Definition bal l x r c :=
   end.
 Arguments bal : simpl never.
 
-Definition wf_bal s :=
-  match s with
-  | node l x r true => well_formed l && well_formed r
-  | _ => well_formed s
-  end.
-
 Definition singleton x := create leaf x leaf.
 Arguments singleton : simpl never.
 
@@ -131,7 +131,7 @@ Arguments add : simpl never.
 End Def.
 
 Section Theory.
-Variables (d d' : unit) (elt : orderType d) (elt' : orderType d').
+Variables (d d' : Order.disp_t) (elt : orderType d) (elt' : orderType d').
 Implicit Types (s l r : t elt) (x : elt) (itv : interval elt).
 
 Lemma well_orderedW s itv itv0 : (itv <= itv0)%O -> well_ordered s itv -> well_ordered s itv0.
@@ -157,16 +157,92 @@ Proof. by apply/well_orderedW; rewrite subitvE/=. Qed.
 Lemma well_orderedWTr s itv : well_ordered s itv -> well_ordered s (Interval itv.1 +oo).
 Proof. by apply/well_orderedW; rewrite subitvE/= lexx Order.lex1. Qed.
 
-Lemma well_formed_create l x r : well_formed l -> well_formed r -> well_formed (create l x r).
+Lemma well_formed_create l x r : well_formed false l -> well_formed false r -> well_formed true (create l x r).
 Proof. by move=> /= ->. Qed.
 
 Lemma well_ordered_create l x r itv : x \in itv -> well_ordered l (Interval itv.1 (BLeft x)) -> well_ordered r (Interval (BRight x) itv.2) -> well_ordered (create l x r) itv.
 Proof. by move=> /= -> ->. Qed.
 
-Lemma well_formed_bal l x r c : wf_bal l -> wf_bal r -> wf_bal (bal l x r c).
+Lemma well_formed_bal l x r c : well_formed c l -> well_formed c r -> well_formed false (bal l x r c).
 Proof.
-case: c => [/=|].
+(* I am so sorry, but doing this by hand is so much fun. *)
+case: c => [/= -> //|].
+case: l => [_|ll lx lr lc]/=.
+  case: r => // rl rx rr rc.
+  case: rl => [|rll rlx rlr rlc]; case: rr => [//|rrl rrx rrr rrc]/=.
+  - rewrite -if_and [rrc && _]andbC => /andP[]/andP[] /negPf rcE.
+    by rewrite rcE/= rcE/= => ->.
+  - rewrite -if_and [rlc && _]andbC andbT => /andP[]/andP[] /negPf rcE.
+    by rewrite rcE/= rcE/= => -> ->. 
+  - rewrite -if_and if_same =>
+      /andP[] /andP[] /andP[] /negPf rlcE ? ? /andP[] /andP[] /negPf rrcE ? ?.
+    rewrite andbC rrcE -if_and andbC rlcE/= rlcE rrcE/=.
+    by repeat (apply/andP; split).
+case: ll => [|lll llx llr llc]/=; case: lr => [|lrl lrx lrr lrc]/=.
+- move=> _; case: r => /= [_|rl rx rr rc]; first by rewrite if_same.
+  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/=.
+  + by rewrite if_same.
+  + rewrite -!if_and [rrc && _]andbC => /andP[]/andP[] /negPf rrcE.
+    by rewrite rrcE if_same/= rrcE => ->.
+  + rewrite -!if_and [rlc && _]andbC andbT => /andP[]/andP[] /negPf rlcE.
+    by rewrite rlcE if_same/= rlcE => -> ->.
+  + rewrite -!if_and if_same [rrc && _]andbC
+      => /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
+    rewrite rrcE -!if_and andbC rlcE if_same -if_and andbC rlcE if_same/= rrcE rlcE/=.
+    by repeat (apply/andP; split).
+- case: r => /= [|rl rx rr rc] /andP[]/andP[] /negPf lrcE.
+    by rewrite if_same -if_and andbC lrcE/= lrcE/= => -> ->.
+  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/=.
+  + by rewrite if_same -if_and andbC lrcE/= lrcE => -> ->.
+  + rewrite if_same -!if_and [rrc && _]andbC
+      => ? ? /andP[]/andP[] /negPf rrcE ? ?.
+    rewrite rrcE if_same -if_and andbC lrcE/= lrcE rrcE/=.
+    by repeat (apply/andP; split).
+  + rewrite if_same -!if_and [rlc && _]andbC andbT
+      => ? ? /andP[]/andP[] /negPf rlcE ? ?.
+    rewrite rlcE if_same -if_and andbC lrcE/= lrcE rlcE/=.
+    by repeat (apply/andP; split).
+  + rewrite !if_same -!if_and
+      => ? ? /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
+    rewrite andbC rrcE -!if_and andbC rlcE if_same -if_and andbC lrcE/= lrcE rlcE rrcE/=.
+    by repeat (apply/andP; split).
+- case: r => /= [|rl rx rr rc] /andP[]/andP[]/andP[] /negPf llcE + + _.
+    by rewrite if_same -if_and andbC llcE/= llcE => -> ->.
+  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/=.
+  + by rewrite if_same -if_and andbC llcE/= llcE => -> ->.
+  + rewrite if_same -!if_and => ? ? /andP[]/andP[] /negPf rrcE ? ?.
+    rewrite andbC rrcE if_same -if_and andbC llcE/= llcE rrcE/=.
+    by repeat (apply/andP; split).
+  + rewrite if_same -!if_and => ? ? /andP[]/andP[]/andP[] /negPf rlcE ? ? _.
+    rewrite andbC rlcE if_same -if_and andbC llcE/= llcE rlcE/=.
+    by repeat (apply/andP; split).
+  + rewrite !if_same -!if_and
+      => ? ? /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
+    rewrite andbC rrcE -!if_and andbC rlcE if_same -if_and andbC llcE/= llcE rlcE rrcE/=.
+    by repeat (apply/andP; split).
+- case: r => /= [|rl rx rr rc] /andP[]/andP[]/andP[] /negPf llcE ? ?.
+    rewrite !if_same -if_and => /andP[]/andP[] /negPf lrcE ? ? _.
+    rewrite andbC lrcE -if_and andbC llcE/= llcE lrcE/=.
+    by repeat (apply/andP; split).
+  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/= /andP[]/andP[] /negPf lrcE ? ?.
+  + rewrite !if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE/= => _.
+    by repeat (apply/andP; split).
+  + rewrite !if_same -!if_and => /andP[]/andP[] /negPf rrcE ? ?.
+    rewrite andbC rrcE if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE rrcE/=.
+    by repeat (apply/andP; split).
+  + rewrite !if_same -!if_and => /andP[]/andP[]/andP[] /negPf rlcE ? ? _.
+    rewrite andbC rlcE if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE rlcE/=.
+    by repeat (apply/andP; split).
+  + rewrite !if_same -!if_and
+      => /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
+      rewrite andbC rrcE -!if_and andbC rlcE if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE rlcE rrcE/=.
 
-case: l => [_|ll lx lr lc].
+    by repeat (apply/andP; split).
+Qed.
+  
+  
+
+  
+
   
 
