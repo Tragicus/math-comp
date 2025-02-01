@@ -27,6 +27,14 @@ Lemma ifC T a b (x y z t : T) :
   if b then if a then x else z else if a then y else t.
 Proof. by case: a; case: b. Qed.
 
+Lemma omap_obind (aT rT sT : Type) (f : aT -> option rT) (g : rT -> sT) (x : option aT) :
+  omap g (obind f x) = obind (omap g \o f) x.
+Proof. by case: x. Qed.
+
+Lemma eq_obind (aT rT : Type) (f g : aT -> option rT) :
+  f =1 g -> obind f =1 obind g.
+Proof. by move=> + []. Qed.
+
 Module RBtree.
 
 Module Subdef.
@@ -37,6 +45,9 @@ Variables (d : Order.disp_t) (elt : orderType d).
 Inductive t : Type :=
   | leaf
   | node : t -> elt -> t -> bool -> t.
+
+Definition red := true.
+Definition black := false.
 
 Fixpoint eqb (s t : t) : bool :=
   match s, t with
@@ -62,13 +73,19 @@ Definition is_red s :=
   | node _ _ _ c => c
   end.
 
+Definition recolor c s :=
+  match s with
+  | leaf => leaf
+  | node l x r _ => node l x r c
+  end.
+
 Fixpoint black_height s :=
   match s with
   | leaf => Some 0
   | node l _ r c =>
     obind (fun l =>
       obind (fun r =>
-        if l == r then Some (l + ~~ c) else None)
+        if l == r then Some (~~ c + l) else None)
         (black_height r))
       (black_height l)
   end.
@@ -81,6 +98,13 @@ Fixpoint well_formed c s :=
       ~~ (c && c') && well_formed c' l && well_formed c' r
   end.
 
+Definition head_wf t :=
+  match t with
+  | leaf => true
+  | node l x r false => true
+  | node l x r true => ~~ is_red l && ~~ is_red r
+  end.
+
 Fixpoint well_ordered s (itv : interval elt) := 
   match s with
   | leaf => true
@@ -89,43 +113,42 @@ Fixpoint well_ordered s (itv : interval elt) :=
 
 Definition is_rb (s : t) := (black_height s != None) && well_formed true s && well_ordered s `]-oo, +oo[.
 
-Definition create l x r := node l x r false.
+Definition create l x r := node l x r black.
 Arguments create : simpl never.
 
-Definition bal l x r c :=
+(* Balancing *)
+
+Definition lbal l x r c :=
   if c then node l x r c else
-  match l, r with
-  | leaf, leaf => node l x r false
-  | node (node lll llx llr true) lx lr true, node rl rx rr true =>
-      node (node (node lll llx llr true) lx lr false) x (node rl rx rr false) true
-  | node (node lll llx llr true) lx lr true, r =>
-      node (node lll llx llr true) lx (node lr x r true) false
-  | node ll lx (node lrl lrx lrr true) true, node rl rx rr true =>
-      node (node ll lx (node lrl lrx lrr true) false) x (node rl rx rr false) true
-  | node ll lx (node lrl lrx lrr true) true, r =>
-      node (node ll lx lrl true) lrx (node lrr x r true) false
-  | node ll lx lr true, node (node rll rlx rlr true) rx rr true =>
-      node (node ll lx lr false) x (node (node rll rlx rlr true) rx rr false) true
-  | l, node (node rll rlx rlr true) rx rr true =>
-      node (node l x rll true) rlx (node rlr rx rr true) false
-  | node ll lx lr true, node rl rx (node rrl rrx rrr true) true =>
-      node (node ll lx lr true) x (node rl rx (node rrl rrx rrr true) false) true
-  | l, node rl rx (node rrl rrx rrr true) true =>
-      node (node l x rl true) rx (node rrl rrx rrr true) false
-  | l, r => node l x r c
+  match l with
+  | node (node ll llx llr true) lx lr true | node ll llx (node llr lx lr true) true =>
+      node (node ll llx llr black) lx (node lr x r black) red
+  | _ => node l x r c
   end.
-Arguments bal : simpl never.
+
+Definition rbal l x r c :=
+  if c then node l x r c else
+  match r with
+  | node (node rl rlx rlr true) rx rr true | node rl rlx (node rlr rx rr true) true =>
+      node (node l x rl black) rlx (node rlr rx rr black) red
+  | _ => node l x r c
+  end.
+
+Arguments lbal : simpl never.
+Arguments rbal : simpl never.
 
 Definition singleton x := create leaf x leaf.
 Arguments singleton : simpl never.
 
-Fixpoint add x s :=
+Fixpoint add_subdef x s :=
   match s with
-  | leaf => singleton x
+  | leaf => node leaf x leaf red
   | node l sx r c => if x == sx then node l x r c else
-    if (x < sx)%O then bal (add x l) sx r c
-    else bal l sx (add x r) c
+    if (x < sx)%O then lbal (add_subdef x l) sx r c
+    else rbal l sx (add_subdef x r) c
   end.
+
+Definition add x s := recolor black (add_subdef x s).
 Arguments add : simpl never.
   
 End Def.
@@ -163,86 +186,200 @@ Proof. by move=> /= ->. Qed.
 Lemma well_ordered_create l x r itv : x \in itv -> well_ordered l (Interval itv.1 (BLeft x)) -> well_ordered r (Interval (BRight x) itv.2) -> well_ordered (create l x r) itv.
 Proof. by move=> /= -> ->. Qed.
 
-Lemma well_formed_bal l x r c : well_formed c l -> well_formed c r -> well_formed false (bal l x r c).
+Lemma well_formedW (t : t elt) c c' : c ==> c' -> well_formed c' t -> well_formed c t.
 Proof.
-(* I am so sorry, but doing this by hand is so much fun. *)
-case: c => [/= -> //|].
-case: l => [_|ll lx lr lc]/=.
-  case: r => // rl rx rr rc.
-  case: rl => [|rll rlx rlr rlc]; case: rr => [//|rrl rrx rrr rrc]/=.
-  - rewrite -if_and [rrc && _]andbC => /andP[]/andP[] /negPf rcE.
-    by rewrite rcE/= rcE/= => ->.
-  - rewrite -if_and [rlc && _]andbC andbT => /andP[]/andP[] /negPf rcE.
-    by rewrite rcE/= rcE/= => -> ->. 
-  - rewrite -if_and if_same =>
-      /andP[] /andP[] /andP[] /negPf rlcE ? ? /andP[] /andP[] /negPf rrcE ? ?.
-    rewrite andbC rrcE -if_and andbC rlcE/= rlcE rrcE/=.
-    by repeat (apply/andP; split).
-case: ll => [|lll llx llr llc]/=; case: lr => [|lrl lrx lrr lrc]/=.
-- move=> _; case: r => /= [_|rl rx rr rc]; first by rewrite if_same.
-  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/=.
-  + by rewrite if_same.
-  + rewrite -!if_and [rrc && _]andbC => /andP[]/andP[] /negPf rrcE.
-    by rewrite rrcE if_same/= rrcE => ->.
-  + rewrite -!if_and [rlc && _]andbC andbT => /andP[]/andP[] /negPf rlcE.
-    by rewrite rlcE if_same/= rlcE => -> ->.
-  + rewrite -!if_and if_same [rrc && _]andbC
-      => /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
-    rewrite rrcE -!if_and andbC rlcE if_same -if_and andbC rlcE if_same/= rrcE rlcE/=.
-    by repeat (apply/andP; split).
-- case: r => /= [|rl rx rr rc] /andP[]/andP[] /negPf lrcE.
-    by rewrite if_same -if_and andbC lrcE/= lrcE/= => -> ->.
-  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/=.
-  + by rewrite if_same -if_and andbC lrcE/= lrcE => -> ->.
-  + rewrite if_same -!if_and [rrc && _]andbC
-      => ? ? /andP[]/andP[] /negPf rrcE ? ?.
-    rewrite rrcE if_same -if_and andbC lrcE/= lrcE rrcE/=.
-    by repeat (apply/andP; split).
-  + rewrite if_same -!if_and [rlc && _]andbC andbT
-      => ? ? /andP[]/andP[] /negPf rlcE ? ?.
-    rewrite rlcE if_same -if_and andbC lrcE/= lrcE rlcE/=.
-    by repeat (apply/andP; split).
-  + rewrite !if_same -!if_and
-      => ? ? /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
-    rewrite andbC rrcE -!if_and andbC rlcE if_same -if_and andbC lrcE/= lrcE rlcE rrcE/=.
-    by repeat (apply/andP; split).
-- case: r => /= [|rl rx rr rc] /andP[]/andP[]/andP[] /negPf llcE + + _.
-    by rewrite if_same -if_and andbC llcE/= llcE => -> ->.
-  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/=.
-  + by rewrite if_same -if_and andbC llcE/= llcE => -> ->.
-  + rewrite if_same -!if_and => ? ? /andP[]/andP[] /negPf rrcE ? ?.
-    rewrite andbC rrcE if_same -if_and andbC llcE/= llcE rrcE/=.
-    by repeat (apply/andP; split).
-  + rewrite if_same -!if_and => ? ? /andP[]/andP[]/andP[] /negPf rlcE ? ? _.
-    rewrite andbC rlcE if_same -if_and andbC llcE/= llcE rlcE/=.
-    by repeat (apply/andP; split).
-  + rewrite !if_same -!if_and
-      => ? ? /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
-    rewrite andbC rrcE -!if_and andbC rlcE if_same -if_and andbC llcE/= llcE rlcE rrcE/=.
-    by repeat (apply/andP; split).
-- case: r => /= [|rl rx rr rc] /andP[]/andP[]/andP[] /negPf llcE ? ?.
-    rewrite !if_same -if_and => /andP[]/andP[] /negPf lrcE ? ? _.
-    rewrite andbC lrcE -if_and andbC llcE/= llcE lrcE/=.
-    by repeat (apply/andP; split).
-  case: rl => [|rll rlx rlr rlc]; case: rr => [|rrl rrx rrr rrc]/= /andP[]/andP[] /negPf lrcE ? ?.
-  + rewrite !if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE/= => _.
-    by repeat (apply/andP; split).
-  + rewrite !if_same -!if_and => /andP[]/andP[] /negPf rrcE ? ?.
-    rewrite andbC rrcE if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE rrcE/=.
-    by repeat (apply/andP; split).
-  + rewrite !if_same -!if_and => /andP[]/andP[]/andP[] /negPf rlcE ? ? _.
-    rewrite andbC rlcE if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE rlcE/=.
-    by repeat (apply/andP; split).
-  + rewrite !if_same -!if_and
-      => /andP[]/andP[]/andP[] /negPf rlcE ? ? /andP[]/andP[] /negPf rrcE ? ?.
-      rewrite andbC rrcE -!if_and andbC rlcE if_same -if_and andbC lrcE -if_and andbC llcE/= llcE lrcE rlcE rrcE/=.
-
-    by repeat (apply/andP; split).
+case: t => [//|l x r tc]/=.
+by case: c => /=[-> //|_]; rewrite -andbA => /andP[] _.
 Qed.
-  
-  
 
-  
+Lemma well_formedWF (t : t elt) c : well_formed c t -> well_formed black t.
+Proof. exact: well_formedW. Qed.
 
-  
+Lemma well_formedEF (t : t elt) c : well_formed c t = ~~ (c && is_red t) && well_formed false t.
+Proof. by case: t => /=[|l _ r c']; rewrite (andbF, andbA). Qed.
+
+Lemma lbal_case (Pl P : t elt -> Prop) l x r c:
+  ((c || head_wf l) -> P (node l x r c)) ->
+  (forall ll llx llr lx lr,
+    ~~ c -> Pl (node (node ll llx llr red) lx lr red) \/ Pl (node ll llx (node llr lx lr red) red) ->
+    P (node (node ll llx llr black) lx (node lr x r black) red)) ->
+  Pl l -> P (lbal l x r c).
+Proof.
+case: c => [/(_ isT)//|]/= + IHP.
+by case: l => /=[|ll lx lr lc];
+  try case: ll => [|lll llx llr llc]; 
+  try case: lr => [|lrl lrx lrr lrc];
+  try case: lc; try case: llc; try case: lrc;
+  try move=> /(_ isT)//;
+  move=> _ IHl; apply: IHP => //; (try by left); right.
+Qed.
+
+Lemma well_ordered_lbal l x r c itv : well_ordered (node l x r c) itv -> well_ordered (lbal l x r c) itv.
+Proof.
+move=> /=/andP[]/andP[] xI lwo rwo.
+apply: (@lbal_case (fun l => well_ordered l (Interval itv.1 (BLeft x))) (fun s => well_ordered s itv)) => //.
+  by move=> _ /=; rewrite xI lwo.
+move=> ll llx llr lx lr/= _ /orP +; rewrite rwo.
+move: xI; rewrite !itv_boundlr !bnd_simp/= => /andP[] _ xI.
+rewrite [X in X || _](AC (2*4*1) (2*3*4*5*6*7*1))/=.
+rewrite [X in _ || X](AC (3*4) (5*1*4*3*6*7*2))/=.
+rewrite -!andb_orr; (repeat move=> /andP[]) => lxx Illx llxlx -> -> -> _.
+rewrite lxx Illx llxlx.
+repeat (apply/andP; split=> //); first exact/(le_trans Illx)/ltW.
+exact/(le_trans _ xI)/ltW.
+Qed.
+
+Lemma black_height_lbal l x r c : black_height (lbal l x r c) = black_height (node l x r c).
+Proof.
+have orPP: forall P, P \/ P -> P by move=> p; case.
+apply: (@lbal_case (fun l' => black_height l' = black_height l) (fun t => black_height t = black_height (node l x r c))) => //.
+move=> ll llx llr lx lr/= /negPf ->.
+case: (black_height ll) => /=[llh|/orPP <- //].
+case: (black_height llr) => /=[llrh|/orPP <- //].
+case: ifP => [/eqP ->|llhE [<- //|<-]]/=; last first.
+  case: (black_height lr) => //= lrh.
+  case: ifP => //= _.
+  by rewrite add0n llhE.
+case: (black_height lr) => /=[lrh|/orPP <- //].
+rewrite !add0n.
+case: ifP => /=[/eqP ->|llrhE /orPP <- /=]; last first.
+  case: (black_height r) => //= rh.
+  case: ifP => //= _.
+  by rewrite (inj_eq (@addnI 1)) llrhE.
+rewrite eqxx => /orPP <- /=.
+case: (black_height r) => //= rh.
+case: ifP => //= _.
+by rewrite eqxx.
+Qed.
+
+Lemma rbal_case (Pr P : t elt -> Prop) l x r c:
+  ((c || head_wf r) -> P (node l x r c)) ->
+  (forall rl rlx rlr rx rr,
+    ~~ c -> Pr (node (node rl rlx rlr red) rx rr red) \/ Pr (node rl rlx (node rlr rx rr red) red) ->
+    P (node (node l x rl black) rlx (node rlr rx rr black) red)) ->
+  Pr r -> P (rbal l x r c).
+Proof.
+case: c => [/(_ isT)//|]/= + IHP.
+by case: r => /=[|rl rx rr rc];
+  try case: rl => [|rll rlx rlr rlc]; 
+  try case: rr => [|rrl rrx rrr rrc];
+  try case: rc; try case: rlc; try case: rrc;
+  try move=> /(_ isT)//;
+  move=> _ IHl; apply: IHP => //; (try by left); right.
+Qed.
+
+Lemma well_ordered_rbal l x r c itv : well_ordered (node l x r c) itv -> well_ordered (rbal l x r c) itv.
+Proof.
+move=> /=/andP[]/andP[] xI lwo rwo.
+apply: (@rbal_case (fun l => well_ordered l (Interval (BRight x) itv.2)) (fun s => well_ordered s itv)) => //.
+  by move=> _ /=; rewrite xI lwo.
+move=> rl rlx rlr rx rr/= _ /orP +; rewrite lwo.
+move: xI; rewrite !itv_boundlr !bnd_simp/= => /andP[] Ix _.
+rewrite [X in X || _](AC (2*4*1) (2*3*4*5*6*7*1))/=.
+rewrite [X in _ || X](AC (3*4) (5*1*4*3*6*7*2))/=.
+rewrite -!andb_orr; (repeat move=> /andP[]) => rxI xrlx rlxrx -> -> -> _.
+rewrite rxI xrlx rlxrx.
+repeat (apply/andP; split=> //); first exact/(le_trans Ix)/ltW.
+exact/(le_trans _ rxI)/ltW.
+Qed.
+
+Lemma black_height_rbal l x r c : black_height (rbal l x r c) = black_height (node l x r c).
+Proof.
+have orPP: forall P, P \/ P -> P by move=> p; case.
+apply: (@rbal_case (fun r' => black_height r' = black_height r) (fun t => black_height t = black_height (node l x r c))) => //.
+move=> rl rlx rlr rx rr/= /negPf ->.
+case: (black_height l) => /=[lh|//].
+case: (black_height rl) => /=[rlh|/orPP <- //].
+case: ifP => [/eqP ->|lhE]/=; last first.
+  case: (black_height rlr) => //= [rlrh|/orPP <- //].
+  case: ifP => //= [/eqP <-|rlhE]; case: (black_height rr) => //= [rrh|/orPP <- //]; last first.
+    case: ifP => /=[_|_ /orPP <- //].
+    by rewrite add0n rlhE => /orPP <-.
+  rewrite add0n; case: ifP => [_|_ /orPP <- //]/=.
+  by rewrite eqxx => /orPP <-/=; rewrite lhE.
+case: (black_height rlr) => /=[rlrh|/orPP <- //].
+case: ifP => //= [/eqP ->|rlhE]; last first.
+  case: (black_height rr) => /=[rrh|/orPP <- //].
+  case: ifP => [_|_ /orPP <- //]/=.
+  by rewrite add0n (inj_eq (@addnI 1)) rlhE => /orPP <-/=.
+case: (black_height rr) => /=[rrh|/orPP <- //].
+rewrite add0n.
+case: ifP => /=[/eqP ->|_ /orPP <- //].
+rewrite eqxx => /orPP <- /=.
+by rewrite (inj_eq (@addnI 1)) add0n.
+Qed.
+
+Lemma well_formed_add t x : well_formed black t -> well_formed black (add x t).
+Proof.
+move=> twf.
+suff: if is_red t then well_formed black (add x t) else well_formed black (add_subdef x t).
+  case: ifP => // _; rewrite /add; case: (add_subdef _ _) => [//|l tx r c]/=.
+  by move=> /andP[] /well_formedWF -> /well_formedWF.
+elim: t twf => [//|l IHl tx r IHr c]/= /andP[].
+rewrite /add/=.
+case: (ltgtP x tx) => /= _ lwf rwf; last first.
+- by case: c lwf rwf => [|-> //] /well_formedWF -> /well_formedWF.
+- pattern (rbal l tx (add_subdef x r) c).
+  apply: (@rbal_case (fun l => well_formed false (recolor black l))) => //; last first.
+  + move: rwf => /well_formedWF /IHr.
+    case: ifP => _ //; case: (add_subdef _ _) => [//|rl rx rr rc]/=.
+    by move=> /andP[] /well_formedWF -> /well_formedWF.
+  + move: lwf => /well_formedWF /= -> rl rlx rlr rx rr /negPf ->/=.
+    by move=> [/andP[]/andP[] /well_formedWF ->|/andP[] -> /andP[]] /well_formedWF -> /well_formedWF ->.
+  case: c lwf rwf => /= /well_formedWF ->.
+    by rewrite well_formedEF/= => /andP[] /negPf + /IHr => ->.
+  move=> /IHr.
+  rewrite /add; case: (add_subdef _ _) => [//|rl rx rr rc]/=.
+  case: rc; last by rewrite if_same => ->.
+  rewrite ![well_formed true _]well_formedEF => + /andP[] rlred rrred.
+  by rewrite rlred rrred/= if_same => ->.
+- pattern (lbal (add_subdef x l) tx r c).
+  apply: (@lbal_case (fun l => well_formed false (recolor black l))) => //; last first.
+  + move: lwf => /well_formedWF /IHl.
+    case: ifP => _ //; case: (add_subdef _ _) => [//|ll lx lr lc]/=.
+    by move=> /andP[] /well_formedWF -> /well_formedWF.
+  + move: rwf => /well_formedWF rwf ll llx llr lx lr /negPf ->/=.
+    by move=> [/andP[]/andP[] /well_formedWF ->|/andP[] -> /andP[]] /well_formedWF -> /well_formedWF ->.
+  case: c lwf rwf => /=.
+    by rewrite well_formedEF/= => /andP[] /negPf + /IHl + /well_formedWF => -> ->.
+  move=> /IHl.
+  rewrite /add; case: (add_subdef _ _) => [//|ll lx lr lc]/=.
+  case: lc; last by rewrite if_same => ->.
+  rewrite ![well_formed true _]well_formedEF => + + /andP[] llred lrred.
+  by rewrite llred lrred/= if_same => ->.
+Qed.
+ 
+Lemma well_ordered_add t x itv : x \in itv -> well_ordered t itv -> well_ordered (add x t) itv.
+Proof.
+move=> xI two.
+suff: well_ordered (add_subdef x t) itv.
+  by rewrite /add; case: (add_subdef _ _).
+elim: t itv xI two => /=[? -> //|l IHl tx r IHr tc itv] + /andP[]/andP[].
+case: (ltgtP x tx) => [| |/= -> -> _ -> //] xtx xI txI lwo rwo.
+  apply/well_ordered_lbal => /=; repeat (apply/andP; split=> //).
+  apply/IHl => //.
+  by move: xI; rewrite !itv_boundlr/= => /andP[] -> _.
+apply/well_ordered_rbal => /=; repeat (apply/andP; split=> //).
+apply/IHr => //.
+by move: xI; rewrite !itv_boundlr/= bnd_simp xtx => /andP[].
+Qed.
+
+Lemma black_height_add t x :
+  (black_height (add x t) == black_height t) || (black_height (add x t) == omap succn (black_height t)).
+Proof.
+have ->: black_height (add x t) = omap (addn (is_red (add_subdef x t))) (black_height (add_subdef x t)).
+  rewrite /add; case: (add_subdef x t) => //= l _ r []; last first.
+    by rewrite (@eq_omap _ _ (addn 0) id)// omap_id.
+  rewrite omap_obind; apply/eq_obind => n/=.
+  rewrite omap_obind; apply/eq_obind => m/=.
+  by case: ifP.
+suff ->: black_height (add_subdef x t) = black_height t.
+  case: (is_red _).
+    by rewrite (@eq_omap _ _ (addn 1) succn)// eqxx orbT.
+  by rewrite (@eq_omap _ _ (addn 0) id)// omap_id eqxx.
+elim: t => //= l IHl tx r IHr c.
+case: (ltgtP x tx) => _ //=.
+  by rewrite black_height_lbal/= IHl.
+by rewrite black_height_rbal/= IHr.
+Qed.
 
