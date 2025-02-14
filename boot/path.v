@@ -635,17 +635,23 @@ Lemma sorted_uniq_in s :
   sorted leT s -> uniq s.
 Proof.
 move=> /in3_sig leT_tr /in1_sig leT_irr; case/all_sigP: (allss s) => s' ->.
-by rewrite sorted_map (map_inj_uniq val_inj); exact: sorted_uniq.
+rewrite sorted_map.
+(* FIXME: Without elaboration, the class for isSub on sig is not
+  searched for, the problem val_subdef ... = proj1_sig ... is
+  solved with CS and reduces to eqtype_isSub_mixin ?a = HB_unnamed_factory_6 ... which fails. *)
+rewrite (map_inj_uniq (@val_inj _ _ [elaborate {x | x \in s}])).
+exact: sorted_uniq.
 Qed.
 
 Lemma sorted_eq_in s1 s2 :
   {in s1 & &, transitive leT} -> {in s1 &, antisymmetric leT} ->
   sorted leT s1 -> sorted leT s2 -> perm_eq s1 s2 -> s1 = s2.
 Proof.
-move=> /in3_sig leT_tr /in2_sig/(_ _ _ _)/val_inj leT_anti + + /[dup] s1s2.
+move=> /in3_sig leT_tr /in2_sig/(_ _ _ _)/(@val_inj _ _ [elaborate {x | x \in s1}]) leT_anti + + /[dup] s1s2.
 have /all_sigP[s1' ->] := allss s1.
 have /all_sigP[{s1s2}s2 ->] : all [in s1] s2 by rewrite -(perm_all _ s1s2).
-by rewrite !sorted_map => ss1' ss2 /(perm_map_inj val_inj)/(sorted_eq leT_tr)->.
+rewrite !sorted_map => ss1' ss2.
+by move=> /(perm_map_inj (@val_inj _ _ [elaborate {x | x \in s1}]))/(sorted_eq leT_tr)->.
 Qed.
 
 Lemma irr_sorted_eq_in s1 s2 :
@@ -656,7 +662,7 @@ move=> /in3_sig leT_tr /in1_sig leT_irr + + /[dup] s1s2.
 have /all_sigP[s1' ->] := allss s1.
 have /all_sigP[s2' ->] : all [in s1] s2 by rewrite -(eq_all_r s1s2).
 rewrite !sorted_map => ss1' ss2' {}s1s2; congr map.
-by apply: (irr_sorted_eq leT_tr) => // x; rewrite -!(mem_map val_inj).
+by apply: (irr_sorted_eq leT_tr) => // x; rewrite -!(mem_map (@val_inj _ _ {x | x \in s1})).
 Qed.
 
 End EqSorted_in.
@@ -1416,11 +1422,11 @@ Lemma perm_sort_inP (T : eqType) (leT : rel T) (s1 s2 : seq T) :
   {in s1 &, antisymmetric leT} ->
   reflect (sort leT s1 = sort leT s2) (perm_eq s1 s2).
 Proof.
-move=> /in2_sig leT_total /in3_sig leT_tr /in2_sig/(_ _ _ _)/val_inj leT_asym.
+move=> /in2_sig leT_total /in3_sig leT_tr /in2_sig/(_ _ _ _)/(@val_inj _ _ [elaborate {x | x \in s1}]) leT_asym.
 apply: (iffP idP) => s1s2; last by rewrite -(perm_sort leT) s1s2 perm_sort.
 move: (s1s2); have /all_sigP[s1' ->] := allss s1.
 have /all_sigP[{s1s2}s2 ->] : all [in s1] s2 by rewrite -(perm_all _ s1s2).
-by rewrite !sort_map => /(perm_map_inj val_inj) /(perm_sortP leT_total)->.
+by rewrite !sort_map => /(perm_map_inj (@val_inj _ _ [elaborate {x | x \in s1}])) /(perm_sortP leT_total)->.
 Qed.
 
 Lemma homo_sort_map (T : Type) (T' : eqType) (f : T -> T') leT leT' :
@@ -1450,7 +1456,7 @@ Proof.
 move=> /in2_sig leT'_asym /in3_sig leT'_trans /in2_sig leT_total.
 move=> /in2_sig f_homo _ /all_sigP[s ->].
 rewrite [in RHS]sort_map -!map_comp /comp.
-by apply: homo_sort_map => // ? ? /leT'_asym /val_inj.
+by apply: homo_sort_map => // ? ? /leT'_asym /(@val_inj _ _ [elaborate sig P]).
 Qed.
 
 (* Function trajectories. *)
@@ -1529,7 +1535,7 @@ Proof.
 apply: (iffP idP) => loop_n; last exact: loop_n.
 case: n => // n in loop_n *; elim=> [|m /= IHm]; first exact: mem_head.
 move: (fpath_traject x n) loop_n; rewrite /looping !iterS -last_traject /=.
-move: (iter m f x) IHm => y /splitPl[p1 p2 def_y].
+move: (iter m f x) IHm => y /(@splitPl T)[p1 p2 def_y].
 rewrite cat_path last_cat def_y; case: p2 => // z p2 /and3P[_ /eqP-> _] _.
 by rewrite inE mem_cat mem_head !orbT.
 Qed.
@@ -1574,8 +1580,8 @@ Proof. by move=> x xp; rewrite -nextE// mem_next. Qed.
 
 Lemma inj_cycle : {in p &, injective f}.
 Proof.
-apply: can_in_inj (iter (size p).-1 f) _ => x /rot_to[i q rip].
-have /fpathE qxE : fcycle f (x :: q) by rewrite -rip rot_cycle.
+apply: can_in_inj (iter (size p).-1 f) _ => x /(@rot_to T)[i q rip].
+have /(@fpathE T) qxE : fcycle f (x :: q) by rewrite -rip rot_cycle.
 have -> : size p = size (rcons q x) by rewrite size_rcons -(size_rot i) rip.
 by rewrite -iterSr -last_traject prednK -?qxE ?size_rcons// last_rcons.
 Qed.
@@ -1673,7 +1679,7 @@ Lemma prev_rev p : uniq p -> prev (rev p) =1 next p.
 Proof.
 move=> Up x; case p_x: (x \in p); last first.
   by rewrite next_nth prev_nth mem_rev p_x.
-case/rot_to: p_x (Up) => [i q def_p] Urp; rewrite -rev_uniq in Urp.
+case/(@rot_to T): p_x (Up) => [i q def_p] Urp; rewrite -rev_uniq in Urp.
 rewrite -(prev_rotr i Urp); do 2 rewrite -(prev_rotr 1) ?rotr_uniq //.
 rewrite -rev_rot -(next_rot i Up) {i p Up Urp}def_p.
 by case: q => // y q; rewrite !rev_cons !(=^~ rcons_cons, rotr1_rcons) /= eqxx.
@@ -1710,7 +1716,7 @@ Proof. by rewrite [LHS]/mem2 (index_map Ih) -map_drop mem_map. Qed.
 Lemma next_map p : uniq p -> forall x, next (map h p) (h x) = h (next p x).
 Proof.
 move=> Up x; case p_x: (x \in p); last by rewrite !next_nth (mem_map Ih) p_x.
-case/rot_to: p_x => i p' def_p.
+case/(@rot_to T'): p_x => i p' def_p.
 rewrite -(next_rot i Up); rewrite -(map_inj_uniq Ih) in Up.
 rewrite -(next_rot i Up) -map_rot {i p Up}def_p /=.
 by case: p' => [|y p''] //=; rewrite !eqxx.
@@ -1772,7 +1778,7 @@ Proof.
 move=> Up p_x p_y ne_xy; case: (rot_to p_x) (p_y) (Up) => [i q def_p] q_y.
 rewrite -(mem_rot i) def_p inE eq_sym (negbTE ne_xy) in q_y.
 rewrite -(rot_uniq i) def_p.
-case/splitPr: q / q_y def_p => q1 q2 def_p Uq12; exists i q1 q2 => //.
+case/(@splitPr T): q / q_y def_p => q1 q2 def_p Uq12; exists i q1 q2 => //.
   by rewrite -(arc_rot i Up p_x) def_p left_arc.
 by rewrite -(arc_rot i Up p_y) def_p right_arc.
 Qed.

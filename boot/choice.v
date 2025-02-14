@@ -449,6 +449,7 @@ rewrite (@extensional _ _ (ft sQ nt)) => [|i].
   by case: find => //= i; congr (omap _ _); apply: extensional => x /=.
 by congr (omap _ _); apply: extensional => x /=.
 Qed.
+
 HB.instance Definition _ := tagged_hasChoice.
 
 End TagChoice.
@@ -510,8 +511,11 @@ HB.factory Record isCountable (T : Type) : Type := {
   pickleK : pcancel pickle unpickle
 }.
 HB.builders Context T of isCountable T.
+#[local]
   HB.instance Definition _ := Equality.copy T (pcan_type pickleK).
+#[local]
   HB.instance Definition _ := PCanHasChoice pickleK.
+#[local]
   HB.instance Definition _ := Choice_isCountable.Build T pickleK.
 HB.end.
 Arguments isCountable.axioms_ T%_type_scope.

@@ -634,7 +634,7 @@ Lemma val_inj : injective val.
 Proof. exact: pcan_inj valK. Qed.
 
 Lemma valKd u0 : cancel val (insubd u0).
-Proof. by move=> u; rewrite /insubd valK. Qed.
+Proof. by move=> u; rewrite /insubd valK /=. Qed.
 
 Lemma val_insubd u0 x : val (insubd u0 x) = if P x then x else val u0.
 Proof. by rewrite /insubd; case: insubP => [u -> | /negPf->]. Qed.
@@ -751,29 +751,23 @@ Definition can_type g of cancel f g : Type := T.
 
 End TransferType.
 
-Section TransferEqType.
-
-Variables (T : Type) (eT : eqType) (f : T -> eT).
-
-Lemma inj_eqAxiom : injective f -> Equality.axiom (fun x y => f x == f y).
+Lemma inj_eqAxiom (T : Type) (eT : eqType) (f : T -> eT) : injective f -> Equality.axiom (fun x y => f x == f y).
 Proof. by move=> f_inj x y; apply: (iffP eqP) => [|-> //]; apply: f_inj. Qed.
 
-HB.instance Definition _ f_inj := hasDecEq.Build (inj_type f_inj)
+HB.instance Definition _ (T : Type) (eT : eqType) (f : T -> eT) (f_inj : injective f) := hasDecEq.Build (inj_type f_inj)
   (inj_eqAxiom f_inj).
 
-HB.instance Definition _ g (fK : pcancel f g) := Equality.copy (pcan_type fK)
+HB.instance Definition _ (T : Type) (eT : eqType) (f : T -> eT) g (fK : pcancel f g) := Equality.copy (pcan_type fK)
   (inj_type (pcan_inj fK)).
 
-HB.instance Definition _ g (fK : cancel f g) := Equality.copy (can_type fK)
+HB.instance Definition _ (T : Type) (eT : eqType) (f : T -> eT) g (fK : cancel f g) := Equality.copy (can_type fK)
   (inj_type (can_inj fK)).
 
-Definition deprecated_InjEqMixin f_inj := hasDecEq.Build T (inj_eqAxiom f_inj).
-Definition deprecated_PcanEqMixin g (fK : pcancel f g) :=
+Definition deprecated_InjEqMixin (T : Type) (eT : eqType) (f : T -> eT) (f_inj : injective f) := hasDecEq.Build T (inj_eqAxiom f_inj).
+Definition deprecated_PcanEqMixin (T : Type) (eT : eqType) (f : T -> eT) g (fK : pcancel f g) :=
   deprecated_InjEqMixin (pcan_inj fK).
-Definition deprecated_CanEqMixin g (fK : cancel f g) :=
+Definition deprecated_CanEqMixin (T : Type) (eT : eqType) (f : T -> eT) g (fK : cancel f g) :=
   deprecated_InjEqMixin (can_inj fK).
-
-End TransferEqType.
 
 Definition sub_type T (P : pred T) (sT : subType P) : Type := sT.
 HB.instance Definition _ T (P : pred T) (sT : subType P) :=
@@ -802,7 +796,6 @@ Notation "[ 'Equality' 'of' T 'by' <: ]" := (Equality.copy T%type (sub_type T%ty
 HB.instance Definition _ := Equality.copy void (pcan_type (of_voidK unit)).
 HB.instance Definition _ (T : eqType) (P : pred T) :=
   [Equality of {x | P x} by <:].
-
 Section ProdEqType.
 
 Variable T1 T2 : eqType.

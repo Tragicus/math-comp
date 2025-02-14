@@ -1895,7 +1895,7 @@ Lemma perm_consP x s t :
           (perm_eq t (x :: s)).
 Proof.
 apply: (iffP idP) => [eq_txs | [i [u [Dt eq_us]]]].
-  have /rot_to[i u Dt]: x \in t by rewrite (perm_mem eq_txs) mem_head.
+  have /(@rot_to T)[i u Dt]: x \in t by rewrite (perm_mem eq_txs) mem_head.
   by exists i, u; rewrite -(perm_cons x) -Dt perm_rot.
 by rewrite -(perm_rot i) Dt perm_cons.
 Qed.
@@ -1924,7 +1924,7 @@ Lemma leq_size_uniq s1 s2 :
   uniq s1 -> {subset s1 <= s2} -> size s2 <= size s1 -> uniq s2.
 Proof.
 elim: s1 s2 => [[] | x s1 IHs s2] // Us1x; have /andP[not_s1x Us1] := Us1x.
-case/forall_cons => /rot_to[i s3 def_s2] ss12 le_s21.
+case/forall_cons => /(@rot_to T)[i s3 def_s2] ss12 le_s21.
 rewrite -(rot_uniq i) -(size_rot i) def_s2 /= in le_s21 *.
 have ss13 y (s1y : y \in s1): y \in s3.
   by have:= ss12 y s1y; rewrite -(mem_rot i) def_s2 inE (negPf (memPn _ y s1y)).
@@ -1993,7 +1993,7 @@ Proof.
 move=> PcatCA s1 s2 eq_s12; rewrite -[s1]cats0 -[s2]cats0.
 elim: s2 nil => [|x s2 IHs] s3 in s1 eq_s12 *.
   by case: s1 {eq_s12}(perm_size eq_s12).
-have /rot_to[i s' def_s1]: x \in s1 by rewrite (perm_mem eq_s12) mem_head.
+have /(@rot_to T)[i s' def_s1]: x \in s1 by rewrite (perm_mem eq_s12) mem_head.
 rewrite -(cat_take_drop i s1) -catA => /PcatCA.
 rewrite catA -/(rot i s1) def_s1 /= -cat1s => /PcatCA/IHs/PcatCA; apply.
 by rewrite -(perm_cons x) -def_s1 perm_rot.
@@ -2277,7 +2277,7 @@ apply: {IHs2}(iffP (IHs2 _)) => [] [m sz_m def_s1].
   by exists ((x == y) :: m); rewrite /= ?sz_m // -def_s1; case: eqP => // ->.
 case: eqP => [_ | ne_xy]; last first.
   by case: m def_s1 sz_m => [|[] m] //; [case | move=> -> [<-]; exists m].
-pose i := index true m; have def_m_i: take i m = nseq (size (take i m)) false.
+set i := index true m; have def_m_i: take i m = nseq (size (take i m)) false.
   apply/all_pred1P; apply/(all_nthP true) => j.
   rewrite size_take ltnNge geq_min negb_or -ltnNge => /andP[lt_j_i _].
   rewrite nth_take //= -negb_add addbF -addbT -negb_eqb.
@@ -2710,7 +2710,7 @@ Proof.
 elim: m s => [|[] m IH] [|x s /= /andP[/negP xS uS]]; rewrite ?filter_pred0 //.
   rewrite inE eqxx /=; congr cons; rewrite [LHS]IH//.
   by apply/eq_in_filter => ? /[1!inE]; case: eqP => [->|].
-by case: ifP => [/mem_mask //|_]; apply: IH.
+by case: ifP => [/(@mem_mask T) //|_]; apply: IH.
 Qed.
 
 Lemma leq_count_subseq P s1 s2 : subseq s1 s2 -> count P s1 <= count P s2.
@@ -2726,8 +2726,8 @@ suff [m mP]: exists m, perm_eq s1 (mask m s2).
 elim: s2 => [|x s2 IHs]//= in s1 s1_le *.
   by exists [::]; apply/allP => x _/=; rewrite eqn_leq s1_le.
 have [y|m s1s2] := IHs (rem x s1); first by rewrite count_mem_rem leq_subLR.
-exists ((x \in s1) :: m); have [|/rem_id<-//] := boolP (x \in s1).
-by move/perm_to_rem/permPl->; rewrite perm_cons.
+exists ((x \in s1) :: m); have [|/(@rem_id T)<-//] := boolP (x \in s1).
+by move/(@perm_to_rem T)/permPl->; rewrite perm_cons.
 Qed.
 
 Lemma count_subseqP s1 s2 :
@@ -2979,7 +2979,10 @@ Hypothesis fK : ocancel f g.
 
 Lemma can2_mem_pmap : pcancel g f -> forall s u, (u \in pmap f s) = (g u \in s).
 Proof.
-by move=> gK s u; rewrite -(mem_map (pcan_inj gK)) pmap_filter // mem_filter gK.
+move=> gK s u.
+rewrite -(mem_map (pcan_inj gK)) pmap_filter // mem_filter.
+(* FIXME: Why is there a meta suddenly appearing here? *)
+by move: (gK u) => ->.
 Qed.
 
 Lemma pmap_uniq s : uniq s -> uniq (pmap f s).
@@ -3142,7 +3145,7 @@ apply: (iffP idP) => [Est | [Is eqIst ->]]; last first.
   by rewrite -{2}[t](mkseq_nth x0) perm_map.
 elim: t => [|x t IHt] in s It Est *.
   by rewrite (perm_small_eq _ Est) //; exists [::].
-have /rot_to[k s1 Ds]: x \in s by rewrite (perm_mem Est) mem_head.
+have /(@rot_to T)[k s1 Ds]: x \in s by rewrite (perm_mem Est) mem_head.
 have [|Is1 eqIst1 Ds1] := IHt s1; first by rewrite -(perm_cons x) -Ds perm_rot.
 exists (rotr k (0 :: map succn Is1)).
   by rewrite perm_rot /It /= perm_cons (iotaDl 1) perm_map.
@@ -4693,12 +4696,14 @@ elim: bs => [|[y [|m]] bs IHbs] //= in bs'0 *.
 by rewrite inE IHbs // mem_cat mem_nseq.
 Qed.
 
+Notation "[` x ]" := (ltac:(refine x; apply _)) (only parsing).
+
 Lemma tallyE s : perm_eq (tally s) [seq (x, count_mem x s) | x <- undup s].
 Proof.
 have /andP[Ubs _] := tallyP s; pose b := [fun s x => (x, count_mem x (tseq s))].
-suffices /permPl->: perm_eq (tally s) (map (b (tally s)) (unzip1 (tally s))).
-  congr perm_eq: (perm_map (b (tally s)) (tallyEl s)).
-  by under eq_map do rewrite /= (permP (tallyK s)).
+suff /permPl->: [elaborate perm_eq (tally s) (map (b (tally s)) (unzip1 (tally s))) ].
+  under eq_map do rewrite /= (permP (tallyK s)).
+  exact/perm_map/tallyEl.
 elim: (tally s) Ubs => [|[x m] bs IH] //= /andP[bs'x /IH-IHbs {IH}].
 rewrite /tseq /= -/(tseq _) count_cat count_nseq /= eqxx mul1n.
 rewrite (count_memPn _) ?addn0 ?perm_cons; last first.

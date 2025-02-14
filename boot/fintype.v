@@ -402,8 +402,12 @@ Section EnumPick.
 
 Variable P : pred T.
 
-Lemma enumT : enum T = Finite.enum T.
-Proof. exact: filter_predT. Qed.
+STOP.
+Set Debug "unification".
+Lemma enumT : enum T = Finite.enum T :> seq T.
+Proof.
+  Set Printing All.
+exact: filter_predT. Qed.
 
 Lemma mem_enum A : enum A =i A.
 Proof. by move=> x; rewrite mem_filter andbC -has_pred1 has_count enumP. Qed.
