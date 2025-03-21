@@ -42,6 +42,7 @@ From mathcomp Require Import seq path fintype.
 (******************************************************************************)
 
 Set Implicit Arguments.
+Set Maximal Implicit Insertion.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
@@ -105,10 +106,10 @@ apply: {IHa}(equivP (IHa _ _ not_v2y)).
 split=> [] [x1 a_x1 [p g_p p_y not_pv]].
   exists x1; [exact: predU1r | exists p => //].
   by rewrite disjoint_sym (disjointWl v2v) // disjoint_sym.
-suffices not_p1v2: [disjoint x1 :: p & v2].
+suffices not_p1v2: [elaborate [disjoint x1 :: p & v2]].
   case/predU1P: a_x1 => [def_x1 | ]; last by exists x1; last exists p.
   case/pred0Pn: not_p1v2; exists x; rewrite /= def_x1 mem_head /=.
-  suffices not_vx: x \notin v by apply/IHn; last apply: dfs_id.
+  suffices not_vx: [elaborate x \notin v] by apply/IHn; last apply: dfs_id.
   by move: not_pv; rewrite disjoint_cons def_x1 => /andP[].
 apply: contraR not_v2y => /pred0Pn[x2 /andP[/= p_x2 v2x2]].
 case/splitPl: p_x2 p_y g_p not_pv => p0 p2 p0x2.
@@ -189,10 +190,10 @@ Definition connect_sym := symmetric connect.
 Hypothesis sym_e : connect_sym.
 
 Lemma same_connect : left_transitive connect.
-Proof. exact: sym_left_transitive connect_trans. Qed.
+Proof. exact: sym_left_transitive (@connect_trans). Qed.
 
 Lemma same_connect_r : right_transitive connect.
-Proof. exact: sym_right_transitive connect_trans. Qed.
+Proof. exact: sym_right_transitive (@connect_trans). Qed.
 
 Lemma same_connect1 x y : e x y -> connect x =1 connect y.
 Proof. by move/connect1; apply: same_connect. Qed.
@@ -332,7 +333,7 @@ by elim: p x e_p => //= y p IHp x /andP[/cl_a->]; apply: IHp.
 Qed.
 
 Lemma connect_closed x : closed e (connect e x).
-Proof. by move=> y z /connect1/same_connect_r; apply. Qed.
+Proof. by move=> y z /connect1/(@same_connect_r T); apply. Qed.
 
 Lemma predC_closed a : closed e a -> closed e [predC a].
 Proof. by move=> cl_a x y /cl_a /[!inE] ->. Qed.
@@ -347,7 +348,7 @@ Lemma mem_closure a : {subset a <= closure e a}.
 Proof. by move=> x a_x; apply/existsP; exists x; rewrite !inE connect0. Qed.
 
 Lemma subset_closure a : a \subset closure e a.
-Proof. by apply/subsetP; apply: mem_closure. Qed.
+Proof. by apply/subsetP; apply: (@mem_closure). Qed.
 
 Lemma n_comp_closure2 x y :
   n_comp e (closure e (pred2 x y)) = (~~ connect e x y).+1.
@@ -368,6 +369,12 @@ Qed.
 
 End Closure.
 Arguments same_connect_rev [T e].
+
+Arguments intro_closed {T e} sym_e [a] _ [x y] _.
+Arguments closed_connect {T e a} _ [x y] _.
+Arguments predC_closed {T e a} _ [x y] _.
+Arguments closure_closed {T e} sym_e a [x y] _.
+Arguments mem_closure {T} e [a x] _.
 
 Section Orbit.
 
@@ -441,7 +448,7 @@ Qed.
 
 Lemma iter_findex x y : fconnect f x y -> iter (findex x y) f x = y.
 Proof.
-rewrite [_ y]fconnect_orbit => fxy; pose i := index y (orbit x).
+rewrite [_ y]fconnect_orbit => fxy; set i := index y (orbit x).
 have lt_ix: i < order x by rewrite -size_orbit index_mem.
 by rewrite -(nth_traject f lt_ix) nth_index.
 Qed.
@@ -484,7 +491,7 @@ Proof.
 move=> x xS; move: (looping_order x) (orbit_uniq x).
 rewrite /looping /orbit -orderSpred looping_uniq /= /looping; set n := _.-1.
 case/predU1P=> // /trajectP[i lt_i_n]; rewrite -iterSr.
-by move=> /injf ->; rewrite ?(iter_in _ f_in) //; case/trajectP; exists i.
+by move=> /injf ->; rewrite ?(iter_in _ (@f_in)) //; case/@trajectP; exists i.
 Qed.
 
 Lemma finv_f_in : {in S, cancel f finv}.
@@ -495,7 +502,7 @@ Proof. by move=> x y xS yS q; rewrite -(f_finv_in xS) q f_finv_in. Qed.
 
 Lemma fconnect_sym_in : {in S &, forall x y, fconnect f x y = fconnect f y x}.
 Proof.
-suff Sf : {in S &, forall x y, fconnect f x y -> fconnect f y x}.
+suff Sf : [elaborate {in S &, forall x y, fconnect f x y -> fconnect f y x}].
   by move=> *; apply/idP/idP=> /Sf->.
 move=> x _ xS _ /connectP [p f_p ->]; elim: p => //= y p IHp in x xS f_p *.
 case/andP: f_p => /eqP <- /(IHp _ (f_in xS)) /connect_trans -> //.
@@ -545,16 +552,16 @@ Lemma injectivePcycle x :
   reflect {in orbit x &, injective f} (fcycle f (orbit x)).
 Proof.
 apply: (iffP idP) => [/inj_cycle//|/cycle_orbit_in].
-by apply; [apply: mem_orbit|apply: in_orbit].
+by apply; [apply: @mem_orbit|apply: in_orbit].
 Qed.
 
 Section orbit_inj.
 
 Hypothesis injf : injective f.
 
-Lemma f_finv : cancel finv f. Proof. exact: (in1T (f_finv_in _ (in2W _))). Qed.
+Lemma f_finv : cancel finv f. Proof. exact: (in1T (@f_finv_in _ _ (in2W _))). Qed.
 
-Lemma finv_f : cancel f finv. Proof. exact: (in1T (finv_f_in _ (in2W _))). Qed.
+Lemma finv_f : cancel f finv. Proof. exact: (in1T (@finv_f_in _ _ (in2W _))). Qed.
 
 Lemma finv_bij : bijective finv.
 Proof. by exists f; [apply: f_finv|apply: finv_f]. Qed.
@@ -562,18 +569,18 @@ Proof. by exists f; [apply: f_finv|apply: finv_f]. Qed.
 Lemma finv_inj : injective finv. Proof. exact: (can_inj f_finv). Qed.
 
 Lemma fconnect_sym x y : fconnect f x y = fconnect f y x.
-Proof. exact: (in2T (fconnect_sym_in _ (in2W _))). Qed.
+Proof. exact: (in2T (@fconnect_sym_in _ _ (in2W _))). Qed.
 
 Let symf := fconnect_sym.
 
 Lemma iter_order x : iter (order x) f x = x.
-Proof. exact: (in1T (iter_order_in _ (in2W _))). Qed.
+Proof. exact: (in1T (@iter_order_in _ _ (in2W _))). Qed.
 
 Lemma iter_finv n x : n <= order x -> iter n finv x = iter (order x - n) f x.
 Proof. exact: (in1T (@iter_finv_in _ _ (in2W _) _)). Qed.
 
 Lemma cycle_orbit x : fcycle f (orbit x).
-Proof. exact: (in1T (cycle_orbit_in _ (in2W _))). Qed.
+Proof. exact: (in1T (@cycle_orbit_in _ _ (in2W _))). Qed.
 
 Lemma fpath_finv x p : fpath finv x p = fpath f (last x p) (rev (belast x p)).
 Proof. exact: (@fpath_finv_in T _ (in2W _)). Qed.
@@ -598,7 +605,7 @@ suff <-: #|preim (froot f) b| = #|b| * n.
   exact/esym/(closed_connect cl_a)/connect_root.
 have{cl_a a_n} (x): b x -> froot f x = x /\ order x = n.
   by case/andP=> /eqP-> /(subsetP a_n)/eqnP->.
-elim: {a b}#|b| {1 3 4}b (eqxx #|b|) => [|m IHm] b def_m f_b.
+elim: {a b}#|b| {1 3 4}b [elaborate eqxx #|b|] => [|m IHm] b def_m f_b.
   by rewrite eq_card0 // => x; apply: (pred0P def_m).
 have [x b_x | b0] := pickP b; last by rewrite (eq_card0 b0) in def_m.
 have [r_x ox_n] := f_b x b_x; rewrite (cardD1 x) [x \in b]b_x eqSS in def_m.
@@ -781,7 +788,7 @@ Proof. by move=> x y xp yp; rewrite !(order_cycle fcycle_undup) ?mem_undup. Qed.
 
 Lemma iter_order_cycle : {in p &, forall x y, iter (order x) f y = y}.
 Proof.
-by move=> x y xp yp; rewrite (eq_order_cycle yp) ?(iter_order_in homo_f f_inj).
+by move=> x y xp yp; rewrite (eq_order_cycle yp); rewrite ?(iter_order_in (@homo_f) (@f_inj)).
 Qed.
 
 End fcycle_undup.
@@ -925,7 +932,7 @@ Variables (T : finType) (f : T -> T).
 Hypothesis injf : injective f.
 
 Lemma finv_inv : finv (finv f) =1 f.
-Proof. exact: (finv_eq_can (f_finv injf)). Qed.
+Proof. exact: (finv_eq_can (f_finv (@injf))). Qed.
 
 Lemma order_finv : order (finv f) =1 order f.
 Proof. by move=> x; apply: eq_card (@same_fconnect_finv _ _ injf x). Qed.
@@ -965,7 +972,7 @@ move=> Aee' Ae'e; split=> [y a_y | x' z' a_x].
 apply/idP/idP=> [/connectP[p e'p ->{z'}] | /connectP[p e_p p_z']].
   elim: p x' a_x e'p => //= y' p IHp x' a_x.
   case: (Ae'e x' a_x) => _ Ae'x /andP[/Ae'x e_xy /IHp e_yz] {Ae'x}.
-  by apply: connect_trans (e_yz _); rewrite // -(closed_connect cl_a e_xy).
+  by apply: connect_trans (e_yz _); rewrite // -(closed_connect (@cl_a) e_xy).
 case: (Ae'e x' a_x) => /connect_trans-> //.
 elim: p {x'}(h x') p_z' a_x e_p => /= [|y p IHp] x p_z' a_x.
   by rewrite -p_z' in a_x *; case: (Ae'e _ a_x); rewrite sym_e'.
@@ -985,7 +992,7 @@ rewrite [h' _ _]iinv_f //; split=> // y' e'xy.
 by rewrite connect1 // a_ee' ?negbK.
 Qed.
 
-Let ccl_a := closed_connect cl_a.
+Let ccl_a := closed_connect (@cl_a).
 
 Lemma adjunction_closed : rel_adjunction -> closed e' [preim h of a].
 Proof.

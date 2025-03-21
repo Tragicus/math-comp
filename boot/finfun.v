@@ -79,6 +79,7 @@ From mathcomp Require Import fintype tuple.
 (******************************************************************************)
 
 Set Implicit Arguments.
+Set Maximal Implicit Insertion.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
@@ -185,7 +186,7 @@ suffices ffunK f g: (forall x, f x = g x) -> f = finfun g.
 case: f => f Dg; rewrite unlock; congr FinfunOf.
 have{} Dg x (aTx : mem_seq (enum aT) x): g x = fun_of_fin_rec f aTx.
   by rewrite -Dg /= (bool_irrelevance (mem_enum _ _) aTx).
-elim: (enum aT) / f (enum_uniq aT) => //= x1 s y f IHf /andP[s'x1 Us] in Dg *.
+elim: (enum aT) / f [elaborate enum_uniq aT] => //= x1 s y f IHf /andP[s'x1 Us] in Dg *.
 rewrite Dg ?eqxx //=; case: eqP => // /eq_axiomK-> /= _.
 rewrite {}IHf // => x s_x; rewrite Dg ?s_x ?orbT //.
 by case: eqP (memPn s'x1 x s_x) => // _ _ /(bool_irrelevance s_x) <-.
@@ -346,7 +347,7 @@ Notation "@ 'ffun_on' aT R" :=
 
 Lemma nth_fgraph_ord T n (x0 : T) (i : 'I_n) f : nth x0 (fgraph f) i = f i.
 Proof.
-by rewrite -[i in RHS]enum_rankK -tnth_fgraph  (tnth_nth x0) enum_rank_ord.
+by rewrite -[i in RHS](@enum_rankK 'I_n) -tnth_fgraph (tnth_nth x0) enum_rank_ord.
 Qed.
 
 (*****************************************************************************)
@@ -419,18 +420,18 @@ Notation fT := {dffun forall x : aT, rT x}.
 Lemma card_family (F : forall x, pred (rT x)) :
   #|(family F : simpl_pred fT)| = foldr muln 1 [seq #|F x| | x : aT].
 Proof.
-rewrite /image_mem; set E := enum aT in (uniqE := enum_uniq aT) *.
+rewrite /image_mem; set E := enum aT in (uniqE := [elaborate enum_uniq aT]) *.
 have trivF x: x \notin E -> #|F x| = 1 by rewrite mem_enum.
 elim: E uniqE => /= [_ | x0 E IH_E /andP[E'x0 uniqE]] in F trivF *.
   have /fin_all_exists[f0 Ff0] x: exists y0, F x =i pred1 y0.
     have /pred0Pn[y Fy]: #|F x| != 0 by rewrite trivF.
     by exists y; apply/fsym/subset_cardP; rewrite ?subset_pred1 // card1 trivF.
   apply: eq_card1 (finfun f0 : fT) _ _ => f; apply/familyP/eqP=> [Ff | {f}-> x].
-    by apply/ffunP=> x; have /[!(Ff0, ffunE)]/eqP := Ff x.
+    by apply/ffunP=> x; have /[!(Ff0, @ffunE)]/eqP := Ff x.
   by rewrite ffunE Ff0 inE /=.
 have [y0 Fxy0 | Fx00] := pickP (F x0); last first.
   by rewrite !eq_card0 // => f; apply: contraFF (Fx00 (f x0))=> /familyP; apply.
-pose F1 x := if eqP is ReflectT Dx then xpred1 (ecast x (rT x) Dx y0) else F x.
+set F1 := fun x => if eqP is ReflectT Dx then xpred1 (ecast x (rT x) Dx y0) else F x.
 transitivity (#|[predX F x0 & family F1 : pred fT]|); last first.
   rewrite cardX {}IH_E {uniqE}// => [|x E'x]; last first.
     rewrite /F1; case: eqP => [Dx | /nesym/eqP-x0'x]; first exact: card1.

@@ -92,6 +92,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 (******************************************************************************)
 
 Set Implicit Arguments.
+Set Maximal Implicit Insertion.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
@@ -215,7 +216,7 @@ by apply: sub_in_path; rewrite /= all_rcons Px.
 Qed.
 
 Lemma sub_in_sorted s : all P s -> sorted e s -> sorted e' s.
-Proof. by case: s => //; apply: sub_in_path. Qed.
+Proof. by case: s => //; apply: @sub_in_path. Qed.
 
 End SubPath_in.
 
@@ -280,7 +281,7 @@ Lemma path_sorted_inE x s :
   all P (x :: s) -> path leT x s = all (leT x) s && sorted leT s.
 Proof.
 move=> Pxs; apply/idP/idP => [xs|/andP[/path_min_sorted<-//]].
-by rewrite (order_path_min_in leT_tr) //; apply: path_sorted xs.
+by rewrite (order_path_min_in (@leT_tr)) //; apply: path_sorted xs.
 Qed.
 
 Lemma sorted_pairwise_in s : all P s -> sorted leT s = pairwise leT s.
@@ -598,7 +599,7 @@ Qed.
 Lemma sorted_ltn_index s :
   sorted s -> {in s &, forall x y, index x s < index y s -> leT x y}.
 Proof.
-case: s => // x0 s' s_sorted x y xs ys /(sorted_ltn_nth leT_tr x0 s_sorted).
+case: s => // x0 s' s_sorted x y xs ys /(sorted_ltn_nth (@leT_tr) x0 s_sorted).
 by rewrite ?nth_index ?[_ \in gtn _]index_mem //; apply.
 Qed.
 
@@ -614,7 +615,7 @@ Lemma sorted_leq_index s :
   sorted s -> {in s &, forall x y, index x s <= index y s -> leT x y}.
 Proof.
 case: s => // x0 s' s_sorted x y xs ys.
-move/(sorted_leq_nth leT_tr leT_refl x0 s_sorted).
+move/(sorted_leq_nth (@leT_tr) leT_refl x0 s_sorted).
 by rewrite ?nth_index ?[_ \in gtn _]index_mem //; apply.
 Qed.
 
@@ -1308,7 +1309,7 @@ Qed.
 
 Lemma sorted_mask_sort s m :
   sorted leT (mask m s) -> {m_s | mask m_s (sort leT s) = mask m s}.
-Proof. by move/(sorted_sort leT_tr) <-; exact: mask_sort. Qed.
+Proof. by move/(sorted_sort (@leT_tr)) <-; exact: mask_sort. Qed.
 
 End Stability_mask.
 
@@ -1319,8 +1320,8 @@ Hypothesis leT_total : {in P &, total leT}.
 Hypothesis leT_tr : {in P & &, transitive leT}.
 
 Let le_sT := relpre (val : sig P -> _) leT.
-Let le_sT_total : total le_sT := in2_sig leT_total.
-Let le_sT_tr : transitive le_sT := in3_sig leT_tr.
+Let le_sT_total : total le_sT := in2_sig (@leT_total).
+Let le_sT_tr : transitive le_sT := in3_sig (@leT_tr).
 
 Lemma mask_sort_in s m :
   all P s -> {m_s : bitseq | mask m_s (sort leT s) = sort leT (mask m s)}.
@@ -1332,7 +1333,7 @@ Qed.
 Lemma sorted_mask_sort_in s m :
   all P s -> sorted leT (mask m s) -> {m_s | mask m_s (sort leT s) = mask m s}.
 Proof.
-move=> ? /(sorted_sort_in leT_tr _) <-; [exact: mask_sort_in | exact: all_mask].
+move=> ? /(sorted_sort_in (@leT_tr) _) <-; [exact: mask_sort_in | exact: all_mask].
 Qed.
 
 End Stability_mask_in.
@@ -1344,17 +1345,18 @@ Variables (leT_total : total leT) (leT_tr : transitive leT).
 
 Lemma subseq_sort : {homo sort leT : t s / subseq t s}.
 Proof.
-move=> _ s /subseqP [m _ ->]; have [m' <-] := mask_sort leT_total leT_tr s m.
+move=> _ s /subseqP [m _ ->]; have [m' <-] := mask_sort leT_total (@leT_tr) s m.
 exact: mask_subseq.
 Qed.
 
 Lemma sorted_subseq_sort t s :
   subseq t s -> sorted leT t -> subseq t (sort leT s).
-Proof. by move=> subseq_ts /(sorted_sort leT_tr) <-; exact: subseq_sort. Qed.
+Proof. by move=> subseq_ts /(sorted_sort (@leT_tr)) <-; exact: subseq_sort. Qed.
 
 Lemma mem2_sort s x y : leT x y -> mem2 s x y -> mem2 (sort leT s) x y.
 Proof.
-move=> lexy /[!mem2E] /subseq_sort.
+(* Why do I need this @??? *)
+move=> lexy /[!@mem2E] /subseq_sort.
 by case: eqP => // _; rewrite {1}/sort /= lexy /=.
 Qed.
 
@@ -1588,6 +1590,10 @@ Qed.
 
 End Fcycle.
 
+Arguments nextE {T f p} f_p [x] p_x.
+Arguments mem_fcycle {T f p} f_p [x] _.
+Arguments inj_cycle {T f p} f_p [x y] _ _ _.
+
 Section UniqCycle.
 
 Variables (n0 : nat) (T : eqType) (e : rel T) (p : seq T).
@@ -1711,13 +1717,13 @@ Variables (T T' : eqType) (h : T' -> T) (e : rel T) (e' : rel T').
 Hypothesis Ih : injective h.
 
 Lemma mem2_map x' y' p' : mem2 (map h p') (h x') (h y') = mem2 p' x' y'.
-Proof. by rewrite [LHS]/mem2 (index_map Ih) -map_drop mem_map. Qed.
+Proof. by rewrite [LHS]/mem2 (index_map (@Ih)) -map_drop mem_map. Qed.
 
 Lemma next_map p : uniq p -> forall x, next (map h p) (h x) = h (next p x).
 Proof.
-move=> Up x; case p_x: (x \in p); last by rewrite !next_nth (mem_map Ih) p_x.
+move=> Up x; case p_x: (x \in p); last by rewrite !next_nth (mem_map (@Ih)) p_x.
 case/(@rot_to T'): p_x => i p' def_p.
-rewrite -(next_rot i Up); rewrite -(map_inj_uniq Ih) in Up.
+rewrite -(next_rot i Up); rewrite -(map_inj_uniq (@Ih)) in Up.
 rewrite -(next_rot i Up) -map_rot {i p Up}def_p /=.
 by case: p' => [|y p''] //=; rewrite !eqxx.
 Qed.

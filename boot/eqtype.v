@@ -132,6 +132,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool.
 (******************************************************************************)
 
 Set Implicit Arguments.
+Set Maximal Implicit Insertion.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
@@ -142,7 +143,7 @@ Definition eq_axiom T (e : rel T) := forall x y, reflect (x = y) (e x y).
 
 HB.mixin Record hasDecEq T := { eq_op : rel T; eqP : eq_axiom eq_op }.
 
-#[mathcomp(axiom="eq_axiom"), short(type="eqType")]
+#[primitive, mathcomp(axiom="eq_axiom"), short(type="eqType")]
 HB.structure Definition Equality := { T of hasDecEq T }.
 
 (* eqE is a generic lemma that can be used to fold back recursive comparisons *)
@@ -558,14 +559,14 @@ HB.mixin Record isSub (T : Type) (P : pred T) (sub_sort : Type) := {
   SubK_subproof : forall x Px, val_subdef (@Sub x Px) = x
 }.
 
-#[short(type="subType")]
+#[primitive, short(type="subType")]
 HB.structure Definition SubType (T : Type) (P : pred T) := { S of isSub T P S }.
 
 Notation val := (isSub.val_subdef (SubType.on _)).
 Notation "\val" := (isSub.val_subdef (SubType.on _)) (only parsing).
 Notation "\val" := (isSub.val_subdef _) (only printing).
 
-#[short(type="subEqType")]
+#[primitive, short(type="subEqType")]
 HB.structure Definition SubEquality T (P : pred T) :=
   { sT of Equality sT & isSub T P sT}.
 
@@ -576,7 +577,7 @@ Variables (T : Type) (P : pred T).
 (* Generic proof that the second property holds by conversion.                *)
 (* The vrefl_rect alias is used to flag generic proofs of the first property. *)
 Lemma vrefl : forall x, P x -> x = x. Proof. by []. Qed.
-Definition vrefl_rect := vrefl.
+Definition vrefl_rect := @vrefl.
 
 Section Theory.
 
@@ -1072,7 +1073,7 @@ Lemma total_homo_mono : total aR ->
     {homo f : x y / aR' x y >-> rR' x y} ->
    {mono f : x y / aR x y >-> rR x y}.
 Proof.
-move=> /(@total_homo_mono_in D rR_anti) hmf hf => x y.
+move=> /(@total_homo_mono_in D (@rR_anti)) hmf hf => x y.
 by apply: hmf => // ?? _ _; apply: hf.
 Qed.
 

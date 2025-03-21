@@ -67,7 +67,7 @@ Implicit Type t : tuple_of.
 Definition tsize of tuple_of := n.
 
 Lemma size_tuple t : size t = n.
-Proof. exact: (eqP (valP t)). Qed.
+Proof. exact: (eqP (@valP _ _ [elaborate tuple_of] t)). Qed.
 
 Lemma tnth_default t : 'I_n -> T.
 Proof. by rewrite -(size_tuple t); case: (tval t) => [|//] []. Qed.
@@ -85,7 +85,8 @@ Qed.
 
 Lemma map_tnth_enum t : map (tnth t) (enum 'I_n) = t.
 Proof.
-case def_t: {-}(val t) => [|x0 t'].
+set l := ((val : tuple_of -> seq T) t).
+case def_t: {-}l => [|x0 t']; rewrite {}/l in def_t.
   by rewrite [enum _]size0nil // -cardE card_ord -(size_tuple t) def_t.
 apply: (@eq_from_nth _ x0) => [|i]; rewrite size_map.
   by rewrite -cardE size_tuple card_ord.
@@ -358,7 +359,7 @@ Lemma tuple_uniqP (t : n.-tuple T) : reflect (injective (tnth t)) (uniq t).
 Proof.
 case: {+}n => [|m] in t *; first by rewrite tuple0; constructor => -[].
 pose x0 := tnth t ord0; apply/(equivP (uniqP x0)); split=> tinj i j.
-  by rewrite !(tnth_nth x0) => /tinj/val_inj; apply; rewrite size_tuple inE.
+  by rewrite !(tnth_nth x0) => /tinj/(@val_inj _ _ [elaborate 'I_m.+1]); apply; rewrite size_tuple inE.
 rewrite !size_tuple !inE => im jm; have := tinj (Ordinal im) (Ordinal jm).
 by rewrite !(tnth_nth x0) => /[apply]-[].
 Qed.
@@ -389,12 +390,13 @@ Definition enum : seq (n.-tuple T) :=
 
 Lemma enumP : Finite.axiom enum.
 Proof.
-case=> /= t t_n; rewrite -(count_map _ (pred1 t)) (pmap_filter (insubK _)).
+case=> /= t t_n.
+rewrite -(count_map _ [elaborate pred1 t]) (pmap_filter (insubK _)).
 rewrite count_filter -(@eq_count _ (pred1 t)) => [|s /=]; last first.
   by rewrite isSome_insub; case: eqP=> // ->.
 elim: n t t_n => [|m IHm] [|x t] //= {}/IHm; move: (iter m _ _) => em IHm.
 transitivity (x \in T : nat); rewrite // -mem_enum codomE.
-elim: (fintype.enum T) (enum_uniq T) => //= y e IHe /andP[/negPf ney].
+elim: (fintype.enum T) [elaborate enum_uniq T] => //= y e IHe /andP[/negPf ney].
 rewrite count_cat count_map inE /preim /= [in LHS]/eq_op /= eq_sym => /IHe->.
 by case: eqP => [->|_]; rewrite ?(ney, count_pred0, IHm).
 Qed.
@@ -428,7 +430,7 @@ Proof. by rewrite -cardE. Qed.
 Canonical enum_tuple A := Tuple (enum_tupleP A).
 
 Definition ord_tuple : n.-tuple 'I_n := Tuple (introT eqP (size_enum_ord n)).
-Lemma val_ord_tuple : val ord_tuple = enum 'I_n. Proof. by []. Qed.
+Lemma val_ord_tuple : (val : _ -> seq 'I_n) ord_tuple = enum 'I_n. Proof. by []. Qed.
 
 Lemma tuple_map_ord U (t : n.-tuple U) : t = [tuple of map (tnth t) ord_tuple].
 Proof. by apply: val_inj => /=; rewrite map_tnth_enum. Qed.

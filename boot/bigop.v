@@ -387,7 +387,10 @@ Section Commutative.
 Variable mul : com_law T.
 Lemma mulmC : commutative mul. Proof. exact: opC. Qed.
 Lemma mulmCA : left_commutative mul.
-Proof. by move=> x y z; rewrite !mulmA [_ x _]mulmC. Qed.
+Proof. move=> x y z.
+STOP.
+Set Printing All.
+rewrite (@mulmA mul). [_ x _](@mulmC mul). Qed.
 Lemma mulmAC : right_commutative mul.
 Proof. by move=> x y z; rewrite -!mulmA [_ y _]mulmC. Qed.
 Lemma mulmACA : interchange mul mul.

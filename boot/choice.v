@@ -267,7 +267,7 @@ HB.mixin Record hasChoice T := Mixin {
     P =1 Q -> find_subdef P =1 find_subdef Q
 }.
 
-#[short(type="choiceType")]
+#[primitive, short(type="choiceType")]
 HB.structure Definition Choice := { T of hasChoice T & hasDecEq T}.
 
 Module Export ChoiceNamespace.
@@ -450,7 +450,9 @@ rewrite (@extensional _ _ (ft sQ nt)) => [|i].
 by congr (omap _ _); apply: extensional => x /=.
 Qed.
 
+Set Debug "unification".
 HB.instance Definition _ := tagged_hasChoice.
+STOP.
 
 End TagChoice.
 
@@ -484,7 +486,7 @@ HB.instance Definition _ T :=
 
 End ChoiceTheory.
 
-#[short(type="subChoiceType")]
+#[primitive, short(type="subChoiceType")]
 HB.structure Definition SubChoice T (P : pred T) :=
   { sT of Choice sT & isSub T P sT }.
 
@@ -502,7 +504,7 @@ HB.mixin Record Choice_isCountable (T : Type) : Type := {
 }.
 Arguments Choice_isCountable.axioms_ T%_type_scope.
 
-#[short(type="countType")]
+#[primitive, short(type="countType")]
 HB.structure Definition Countable := { T of Choice T & Choice_isCountable T }.
 
 HB.factory Record isCountable (T : Type) : Type := {
@@ -510,6 +512,7 @@ HB.factory Record isCountable (T : Type) : Type := {
   unpickle : nat -> option T;
   pickleK : pcancel pickle unpickle
 }.
+
 HB.builders Context T of isCountable T.
 #[local]
   HB.instance Definition _ := Equality.copy T (pcan_type pickleK).
@@ -571,7 +574,7 @@ Arguments pickleK {T} x : rename.
 Arguments pickleK_inv {T} x.
 Arguments pickle_invK {T} n : rename.
 
-#[short(type="subCountType")]
+#[primitive, short(type="subCountType")]
 HB.structure Definition SubCountable T (P : pred T) :=
   { sT of Countable sT & isSub T P sT}.
 

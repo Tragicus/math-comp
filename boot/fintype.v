@@ -167,7 +167,7 @@ HB.mixin Record isFinite T of Equality T := {
 (* a useless computational interpretation due to the wasteful Peano integer   *)
 (* encodings.                                                                 *)
 
-#[short(type="finType")]
+#[primitive, short(type="finType")]
 HB.structure Definition Finite := {T of isFinite T & Countable T }.
 (* As with Countable, the interface explicitly includes the somewhat redundant*)
 (* Equality, Choice and Countable superclasses to ensure the forgetful        *)
@@ -402,12 +402,8 @@ Section EnumPick.
 
 Variable P : pred T.
 
-STOP.
-Set Debug "unification".
 Lemma enumT : enum T = Finite.enum T :> seq T.
-Proof.
-  Set Printing All.
-exact: filter_predT. Qed.
+Proof. exact: filter_predT. Qed.
 
 Lemma mem_enum A : enum A =i A.
 Proof. by move=> x; rewrite mem_filter andbC -has_pred1 has_count enumP. Qed.
@@ -1074,7 +1070,7 @@ apply: (iffP idP) => [injf | [x Dx [y Dxy eqfxy]]]; last first.
   rewrite inE /= -(mem_enum D) -(mem_rot i) defE inE in Dxy.
   rewrite andb_orr andbC andbN in Dxy.
   by rewrite eqfxy map_f //; case/andP: Dxy.
-pose p := [pred x in D | [exists (y | y \in [predD1 D & x]), f x == f y]].
+set p := [pred x in D | [exists (y | y \in [predD1 D & x]), f x == f y]].
 case: (pickP p) => [x /= /andP[Dx /exists_inP[y Dxy /eqP eqfxy]] | no_p].
   by exists x; last exists y.
 rewrite /dinjectiveb map_inj_in_uniq ?enum_uniq // in injf => x y Dx Dy eqfxy.
@@ -1437,7 +1433,7 @@ HB.instance Definition _ (g : fT -> eT) (fK : cancel f g) :=
 
 End TransferFinType.
 
-#[short(type="subFinType")]
+#[primitive, short(type="subFinType")]
 HB.structure Definition SubFinite (T : Type) (P : pred T) :=
   { sT of Finite sT & isSub T P sT }.
 
@@ -1464,10 +1460,15 @@ HB.builders Context (T : finType) (P : pred T) (sT : Type)
 Definition sub_enum : seq sT := pmap insub (enumF T).
 
 Lemma mem_sub_enum u : u \in sub_enum.
-Proof. by rewrite mem_pmap_sub -enumT mem_enum. Qed.
+Proof.
+(* FIXME : I can not extract the Equality mixin out of sT unless I elaborate explicitly, because this mixin is hidden in a `SubEquality.Class _` that I can not break. *)
+by rewrite (@mem_pmap_sub _ _ [elaborate (sT : subEqType P)]) -enumT mem_enum.
+Qed.
 
 Lemma sub_enum_uniq : uniq sub_enum.
-Proof. by rewrite pmap_sub_uniq // -enumT enum_uniq. Qed.
+Proof.
+by rewrite (@pmap_sub_uniq _ _ [elaborate (sT : subEqType P)]) // -enumT enum_uniq.
+Qed.
 
 Lemma val_sub_enum : map val sub_enum = enum P.
 Proof.
@@ -1475,6 +1476,7 @@ rewrite pmap_filter; last exact: insubK.
 by apply: eq_filter => x; apply: isSome_insub.
 Qed.
 
+#[local]
 HB.instance Definition SubFinMixin := isFinite.Build sT
   (Finite.uniq_enumP sub_enum_uniq mem_sub_enum).
 HB.end.
@@ -1483,7 +1485,7 @@ HB.end.
 (* has a finType structure.                                           *)
 
 HB.instance Definition _ (T : finType) (P : pred T) (sT : subType P) :=
-  (SubCountable_isFinite.Build _ _ (sub_type sT)).
+  (SubCountable_isFinite.Build T P (sub_type sT)).
 
 Notation "[ 'Finite' 'of' T 'by' <: ]" := (Finite.copy T%type (sub_type T%type))
   (format "[ 'Finite'  'of'  T  'by'  <: ]") : form_scope.
@@ -1515,7 +1517,7 @@ Variables (T : finType) (P : pred T).
 HB.instance Definition _ := [Finite of {x | P x} by <:].
 
 Lemma card_sig : #|{: {x | P x}}| = #|[pred x | P x]|.
-Proof. exact: card_sub. Qed.
+Proof. exact: (card_sub {: {x : T | P x}}). Qed.
 
 End CardSig.
 
@@ -1573,7 +1575,10 @@ Proof. by case: s => // x s _; exists x; rewrite mem_head. Qed.
 
 Lemma seq_subE s (s_gt0 : size s > 0) :
   s = map val (map (insubd (seq_sub_default s_gt0)) s : seq (seq_sub s)).
-Proof. by rewrite -map_comp map_id_in// => x x_in_s /=; rewrite insubdK. Qed.
+Proof.
+rewrite -map_comp map_id_in// => x x_in_s /=.
+by rewrite (@insubdK _ _ [elaborate seq_sub s]).
+Qed.
 
 End SeqReplace.
 Notation in_sub_seq s_gt0 := (insubd (seq_sub_default s_gt0)).
@@ -1648,7 +1653,7 @@ rewrite /extremum; case: pickP => [i /andP[Pi /'forall_implyP/= min_i] | no_i].
   by split=> // j; apply/implyP.
 pose TP := seq_sub [seq F i | i <- enum P].
 have FPP (iP : {i | P i}) : F (proj1_sig iP) \in [seq F i | i <- enum P].
-  by rewrite map_f// mem_enum; apply: valP.
+  by rewrite map_f// mem_enum; apply: (@valP _ _ [elaborate sig P]).
 pose FP := SeqSub (FPP _).
 have []//= := @extremumP _ _ (relpre val ord) (exist P i0 Pi0) xpredT FP.
 - by move=> [/= _/mapP[i iP ->]]; apply: ord_refl; rewrite mem_enum in iP.
@@ -1739,7 +1744,7 @@ HB.instance Definition _ := [Countable of ordinal by <:].
 
 Lemma ltn_ord (i : ordinal) : i < n. Proof. exact: valP i. Qed.
 
-Lemma ord_inj : injective nat_of_ord. Proof. exact: val_inj. Qed.
+Lemma ord_inj : injective nat_of_ord. Proof. exact: (@val_inj _ _ [elaborate ordinal]). Qed.
 
 Definition ord_enum : seq ordinal := pmap insub (iota 0 n).
 
@@ -1750,7 +1755,9 @@ by apply/all_filterP; apply/allP=> i; rewrite mem_iota isSome_insub.
 Qed.
 
 Lemma ord_enum_uniq : uniq ord_enum.
-Proof. by rewrite pmap_sub_uniq ?iota_uniq. Qed.
+Proof.
+by rewrite (@pmap_sub_uniq _ _ [elaborate ordinal : subEqType _]) ?iota_uniq.
+Qed.
 
 Lemma mem_ord_enum i : i \in ord_enum.
 Proof. by rewrite -(mem_map ord_inj) val_ord_enum mem_iota ltn_ord. Qed.
@@ -1788,7 +1795,8 @@ Proof. by apply: val_inj; apply: nth_enum_ord. Qed.
 
 Lemma index_enum_ord (i : 'I_n) : index i (enum 'I_n) = i.
 Proof.
-by rewrite -[in LHS](nth_ord_enum i i) index_uniq ?(enum_uniq, size_enum_ord).
+rewrite -[in LHS](nth_ord_enum i i) index_uniq ?(enum_uniq, size_enum_ord)//.
+exact: enum_uniq.
 Qed.
 
 Lemma mask_enum_ord m :
@@ -1920,7 +1928,7 @@ Proof. exact: nth_image. Qed.
 Lemma nth_enum_rank_in x00 x0 A Ax0 :
   {in A, cancel (@enum_rank_in T x0 A Ax0) (nth x00 (enum A))}.
 Proof.
-move=> x Ax; rewrite enum_rank_in.unlock insubdK ?nth_index ?mem_enum //.
+move=> x Ax; rewrite enum_rank_in.unlock (@insubdK _ _ [elaborate 'I_#|A|]) ?nth_index ?mem_enum //.
 by rewrite cardE [_ \in _]index_mem mem_enum.
 Qed.
 
@@ -1936,7 +1944,7 @@ Proof. by move=> x; apply: enum_rankK_in. Qed.
 
 Lemma enum_valK_in x0 A Ax0 : cancel enum_val (@enum_rank_in T x0 A Ax0).
 Proof.
-move=> x; apply: ord_inj; rewrite enum_rank_in.unlock insubdK; last first.
+move=> x; apply: ord_inj; rewrite enum_rank_in.unlock (@insubdK _ _ [elaborate 'I_#|A|]); last first.
   by rewrite cardE [_ \in _]index_mem mem_nth // -cardE.
 by rewrite index_uniq ?enum_uniq // -cardE.
 Qed.
@@ -1976,14 +1984,15 @@ Proof. by move: enum_rankK enum_valK; exists enum_rank. Qed.
 Lemma fin_all_exists U (P : forall x : T, U x -> Prop) :
   (forall x, exists u, P x u) -> (exists u, forall x, P x (u x)).
 Proof.
-move=> ex_u; pose Q m x := enum_rank x < m -> {ux | P x ux}.
-suffices: forall m, m <= #|T| -> exists w : forall x, Q m x, True.
+move=> ex_u; set Q := fun m x => enum_rank x < m -> {ux | P x ux}.
+suffices: [elaborate forall m, m <= #|T| -> exists w : forall x, Q m x, True].
   case/(_ #|T|)=> // w _; pose u x := sval (w x (ltn_ord _)).
   by exists u => x; rewrite {}/u; case: (w x _).
 elim=> [|m IHm] ltmX; first by have w x: Q 0 x by []; exists w.
 have{IHm} [w _] := IHm (ltnW ltmX); pose i := Ordinal ltmX.
 have [u Pu] := ex_u (enum_val i); suffices w' x: Q m.+1 x by exists w'.
-rewrite /Q ltnS leq_eqVlt (val_eqE _ i); case: eqP => [def_i _ | _ /w //].
+rewrite /Q ltnS leq_eqVlt.
+rewrite (@val_eqE _ _ [elaborate 'I_#|T| : subEqType _] _ i); case: eqP => [def_i _ | _ /w //].
 by rewrite -def_i enum_rankK in u Pu; exists u.
 Qed.
 
@@ -2084,16 +2093,17 @@ Proof. by case: n i => [[]|n] //= i; rewrite -addnS (leq_add (leq_b1 _)). Qed.
 
 Definition lift n (h : 'I_n) (i : 'I_n.-1) := Ordinal (lift_subproof h i).
 
-Lemma unlift_subproof n (h : 'I_n) (u : {j | j != h}) : unbump h (val u) < n.-1.
+(* FIXME: That is because we do not have delta in elpi's unification *)
+Lemma unlift_subproof n (h : 'I_n) (u : {j : 'I_n | j != h}) : unbump h (val u : 'I_n) < n.-1.
 Proof.
 case: n h u => [|n h] [] //= j ne_jh.
 rewrite -(leq_bump2 h.+1) bumpS unbumpK // /bump.
 case: (ltngtP n h) => [|_|eq_nh]; rewrite ?(leqNgt _ h) ?ltn_ord //.
-by rewrite ltn_neqAle [j <= _](valP j) {2}eq_nh andbT.
+by rewrite ltn_neqAle [j <= _](@valP _ _ [elaborate 'I_n.+1] j) {2}eq_nh andbT.
 Qed.
 
 Definition unlift n (h i : 'I_n) :=
-  omap (fun u : {j | j != h} => Ordinal (unlift_subproof u)) (insub i).
+  [elaborate omap (fun u : {j : 'I_n | j != h} => Ordinal (unlift_subproof u)) (insub i)].
 
 Variant unlift_spec n h i : option 'I_n.-1 -> Type :=
   | UnliftSome j of i = lift h j : unlift_spec h i (Some j)
@@ -2126,7 +2136,9 @@ by case Dui: (unlift h i) / (unliftP h i) => [j Dh|//]; exists j.
 Qed.
 
 Lemma lift_inj n (h : 'I_n) : injective (lift h).
-Proof. by move=> i1 i2 [/(can_inj (bumpK h))/val_inj]. Qed.
+Proof.
+by move=> i1 i2 [/(can_inj (bumpK h))/(@val_inj _ _ [elaborate 'I_n.-1])].
+Qed.
 Arguments lift_inj {n h} [i1 i2] eq_i12h : rename.
 
 Lemma liftK n (h : 'I_n) : pcancel (lift h) (unlift h).
@@ -2135,7 +2147,9 @@ Proof. by move=> i; case: (unlift_some (neq_lift h i)) => j /lift_inj->. Qed.
 (* Shifting and splitting indices, for cutting and pasting arrays *)
 
 Lemma lshift_subproof m n (i : 'I_m) : i < m + n.
-Proof. by apply: leq_trans (valP i) _; apply: leq_addr. Qed.
+Proof.
+by apply: leq_trans (@valP _ _ [elaborate 'I_m] i) _; apply: leq_addr.
+Qed.
 
 Lemma rshift_subproof m n (i : 'I_n) : m + i < m + n.
 Proof. by rewrite ltn_add2l. Qed.
@@ -2144,10 +2158,14 @@ Definition lshift m n (i : 'I_m) := Ordinal (lshift_subproof n i).
 Definition rshift m n (i : 'I_n) := Ordinal (rshift_subproof m i).
 
 Lemma lshift_inj m n : injective (@lshift m n).
-Proof. by move=> ? ? /(f_equal val) /= /val_inj. Qed.
+Proof.
+by move=> ? ? /(f_equal (val : 'I_(m + n) -> nat))/= /(@val_inj _ _ [elaborate 'I_m]).
+Qed.
 
 Lemma rshift_inj m n : injective (@rshift m n).
-Proof. by move=> ? ? /(f_equal val) /addnI /val_inj. Qed.
+Proof.
+by move=> ? ? /(f_equal (val : 'I_(m + n) -> nat)) -/addnI /(@val_inj _ _ [elaborate 'I_n]).
+Qed.
 
 Lemma eq_lshift m n i j : (@lshift m n i == @lshift m n j) = (i == j).
 Proof. by rewrite (inj_eq (@lshift_inj _ _)). Qed.
@@ -2157,7 +2175,7 @@ Proof. by rewrite (inj_eq (@rshift_inj _ _)). Qed.
 
 Lemma eq_lrshift m n i j : (@lshift m n i == @rshift m n j) = false.
 Proof.
-apply/eqP=> /(congr1 val)/= def_i; have := ltn_ord i.
+apply/eqP=> /(congr1 (val : 'I_(m + n) -> nat))/= def_i; have := ltn_ord i.
 by rewrite def_i -ltn_subRL subnn.
 Qed.
 
@@ -2230,7 +2248,7 @@ Proof. by rewrite subKn ?leq_ord. Qed.
 Definition inord m : 'I_n := insubd ord0 m.
 
 Lemma inordK m : m < n -> inord m = m :> nat.
-Proof. by move=> lt_m; rewrite val_insubd lt_m. Qed.
+Proof. by move=> lt_m; rewrite (@val_insubd _ _ [elaborate 'I_n]) lt_m. Qed.
 
 Lemma inord_val (i : 'I_n) : inord i = i.
 Proof. by rewrite /inord /insubd valK. Qed.

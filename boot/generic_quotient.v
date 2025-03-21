@@ -571,19 +571,19 @@ Proof. by move=> x; rewrite /= (pi_CD _ (erepr x) _) ?ereprK /eC /= ?encDP. Qed.
 
 Local Notation qT := (type_of (Phantom (rel D) encD)).
 #[export]
-HB.instance Definition _ := isQuotient.Build D qT equivQTP.
+HB.instance Definition _ p := isQuotient.Build D (type_of p) equivQTP.
 
-Lemma eqmodP x y : reflect (x = y %[mod qT]) (eD x y).
+Lemma eqmodP p x y : reflect (x = y %[mod type_of p]) (eD x y).
 Proof. by apply: (iffP (pi_DC _ _)); rewrite !unlock. Qed.
 
 #[export]
-HB.instance Definition _ := Choice.copy qT (can_type ereprK).
+HB.instance Definition _ p := Choice.copy (type_of p) (can_type ereprK).
 
-Lemma eqmodE x y : x == y %[mod qT] = eD x y.
-Proof. exact: sameP eqP (@eqmodP _ _). Qed.
+Lemma eqmodE p x y : x == y %[mod type_of p] = eD x y.
+Proof. exact: sameP eqP (@eqmodP _ _ _). Qed.
 
 #[export]
-HB.instance Definition _ := isEqQuotient.Build _ eD qT eqmodE.
+HB.instance Definition _ p := isEqQuotient.Build _ eD (type_of p) (eqmodE p).
 
 End EquivQuot.
 Module Exports. HB.reexport. End Exports.
