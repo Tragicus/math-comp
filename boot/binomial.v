@@ -58,7 +58,7 @@ apply/idP/idP=> [pr_p | dv_pF]; last first.
   by rewrite orbC -addn1 dvdn_addr ?dvdn_mulr // dvdn1 => ->.
 pose Fp1 := Ordinal lt1p; pose Fp0 := Ordinal p_gt0.
 have ltp1p: p.-1 < p by [rewrite prednK]; pose Fpn1 := Ordinal ltp1p.
-case eqF1n1: (Fp1 == Fpn1); first by rewrite -{1}[p]prednK -1?((1 =P p.-1) _).
+case eqF1n1: [elaborate Fp1 == Fpn1]; first by rewrite -{1}[p]prednK -1?((1 =P p.-1) _).
 have toFpP m: m %% p < p by rewrite ltn_mod.
 pose toFp := Ordinal (toFpP _); pose mFp (i j : 'I_p) := toFp (i * j).
 have Fp_mod (i : 'I_p) : i %% p = i by apply: modn_small.
@@ -72,13 +72,13 @@ pose mFpCL : Monoid.com_law _ := HB.pack mFp mFpcM.
 pose mFpM := Monoid.Law.sort mFpCL.
 pose vFp (i : 'I_p) := toFp (egcdn i p).1.
 have vFpV i: i != Fp0 -> mFp (vFp i) i = Fp1.
-  rewrite -val_eqE /= -lt0n => i_gt0; apply: val_inj => /=.
+  rewrite -(@val_eqE _ _ [elaborate 'I_p : subEqType _]) /= -lt0n => i_gt0; apply: val_inj => /=.
   rewrite modnMml; case: egcdnP => //= _ km -> _; rewrite {km}modnMDl.
   suffices: coprime i p by move/eqnP->; rewrite modn_small.
   rewrite coprime_sym prime_coprime //; apply/negP=> /(dvdn_leq i_gt0).
   by rewrite leqNgt ltn_ord.
 have vFp0 i: i != Fp0 -> vFp i != Fp0.
-  by move/vFpV; apply/contra_eq_neq => ->; rewrite -val_eqE /= mul0n mod0n.
+  by move/vFpV; apply/contra_eq_neq => ->; rewrite -(@val_eqE _ _ [elaborate 'I_p : subEqType _]) /= mul0n mod0n.
 have vFpK: {in predC1 Fp0, involutive vFp}.
   move=> i n0i; rewrite /= -[vFp _]mFp1r -(vFpV _ n0i) mFpA.
   by rewrite vFpV (vFp0, mFp1).
@@ -88,7 +88,7 @@ have eqFp (i j : 'I_p): (i == j) = (p %| p + i - j).
   by rewrite -eqn_mod_dvd ?(modnDl, Fp_mod).
 have vFpId i: (vFp i == i :> nat) = xpred2 Fp1 Fpn1 i.
   have [->{i} | ni0] := eqVneq i Fp0.
-    by rewrite -!val_eqE /= egcd0n modn_small //= -(subnKC lt1p).
+    by rewrite -!(@val_eqE _ _ [elaborate 'I_p : subEqType _]) /= egcd0n modn_small //= -(subnKC lt1p).
   rewrite 2!eqFp -Euclid_dvdM // -[_ - p.-1]subSS prednK //.
   have lt0i: 0 < i by rewrite lt0n.
   rewrite -addnS addKn -addnBA // mulnDl -{2}(addn1 i) -subn_sqr.
@@ -103,18 +103,20 @@ rewrite dFact //; rewrite ((big_morph toFp) Fp1 mFpM) //; first last.
 - by apply: val_inj; rewrite /= modn_small.
 - by move=> i j; apply: val_inj; rewrite /= modnMm.
 rewrite big_mkord (eq_bigr id) => [|i _]; last by apply: val_inj => /=.
-pose ltv i := vFp i < i; rewrite (bigID ltv) -/mFpM [mFpM _ _]mFpC.
-rewrite (bigD1 Fp1) -/mFpM; last by rewrite [ltv _]ltn_neqAle vFpId.
-rewrite [mFpM _ _]mFp1 (bigD1 Fpn1) -?mFpA -/mFpM; last first.
+pose ltv i := vFp i < i.
+(* FIXME: The tc solver should unfold elpi constants (e.g. `c0`), so that mFpM gets unfolded to mFpCL *)
+rewrite (@bigID _ _ mFpCL _ _ ltv) -/mFpM [mFpM _ _]mFpC.
+rewrite (@bigD1 _ mFpCL _ _ Fp1) -/mFpM; last by rewrite [ltv _]ltn_neqAle vFpId.
+rewrite [mFpM _ _]mFp1 (@bigD1 _ mFpCL _ _ Fpn1) -?mFpA -/mFpM; last first.
   rewrite -lt0n -ltnS prednK // lt1p.
   by rewrite [ltv _]ltn_neqAle vFpId eqxx orbT eq_sym eqF1n1.
-rewrite (reindex_onto vFp vFp) -/mFpM => [|i]; last by do 3!case/andP; auto.
+rewrite (@reindex_onto _ mFpCL _ _ _ vFp vFp) -/mFpM => [|i]; last by do 3!case/andP; auto.
 rewrite (eq_bigl (xpredD1 ltv Fp0)) => [|i]; last first.
   rewrite andbC -!andbA -2!negb_or -vFpId orbC -leq_eqVlt -ltnNge.
   have [->|ni0] := eqVneq i; last by rewrite vFpK // eqxx vFp0.
   by case: eqP => // ->; rewrite !andbF.
-rewrite -{2}[mFp]/mFpM -[mFpM _ _]big_split -/mFpM.
-by rewrite big1 ?mFp1r //= => i /andP [/vFpV].
+rewrite -{2}[mFp]/mFpM -[mFpM _ _](@big_split _ _ mFpCL) -/mFpM.
+by rewrite (@big1 _ _ mFpCL) ?mFp1r //= => i /andP [/vFpV].
 Qed.
 
 (** The falling factorial *)
@@ -300,7 +302,8 @@ Theorem expnDn a b n :
   (a + b) ^ n = \sum_(i < n.+1) 'C(n, i) * (a ^ (n - i) * b ^ i).
 Proof.
 elim: n => [|n IHn]; rewrite big_ord_recl muln1 ?big_ord0 //.
-rewrite expnS {}IHn /= mulnDl !big_distrr /= big_ord_recl muln1 subn0.
+rewrite expnS {}IHn /= mulnDl.
+rewrite !(@big_distrr _ _ _ (addn : Monoid.add_law 0 muln))/= big_ord_recl muln1 subn0.
 rewrite !big_ord_recr /= !binn !subnn bin0 !subn0 !mul1n -!expnS -addnA.
 congr (_ + _); rewrite addnA -big_split /=; congr (_ + _).
 apply: eq_bigr => i _; rewrite mulnCA (mulnA a) -expnS subnSK //=.
@@ -313,7 +316,7 @@ Definition Pascal := expnDn.
 Lemma Vandermonde k l i :
   \sum_(j < i.+1) 'C(k, j) * 'C(l, i - j) = 'C(k + l , i).
 Proof.
-pose f k i := \sum_(j < i.+1) 'C(k, j) * 'C(l, i - j).
+set f := fun k i => \sum_(j < i.+1) 'C(k, j) * 'C(l, i - j).
 suffices{k i} fxx k i: f k.+1 i.+1 = f k i.+1 + f k i.
   elim: k i => [i | k IHk [|i]]; last by rewrite -/(f _ _) fxx /f !IHk -binS.
     by rewrite big_ord_recl big1_eq addn0 mul1n subn0.
@@ -327,7 +330,7 @@ Lemma subn_exp m n k :
   m ^ k - n ^ k = (m - n) * (\sum_(i < k) m ^ (k.-1 -i) * n ^ i).
 Proof.
 case: k => [|k]; first by rewrite big_ord0 muln0.
-rewrite mulnBl !big_distrr big_ord_recl big_ord_recr /= subn0 muln1.
+rewrite mulnBl !(@big_distrr _ _ _ (addn : Monoid.add_law 0 muln)) big_ord_recl big_ord_recr /= subn0 muln1.
 rewrite subnn mul1n -!expnS subnDA; congr (_ - _); apply: canRL (addnK _) _.
 congr (_ + _); apply: eq_bigr => i _.
 by rewrite (mulnCA n) -expnS mulnA -expnS subnSK /=.
@@ -388,7 +391,7 @@ by rewrite all_predI all_predC has_pred1 andbC.
 Qed.
 
 Lemma card_inj_ffuns_on D T (R : pred T) :
-  #|[set f : {ffun D -> T} in ffun_on R | injectiveb f]| = #|R| ^_ #|D|.
+  #|[set f : (@finfun_of D (fun=> T) (Phant (D -> T))) in ffun_on R | injectiveb f]| = #|R| ^_ #|D|.
 Proof.
 rewrite -card_uniq_tuples.
 have bijFF: {on (_ : pred _), bijective (@Finfun D T)}.
@@ -399,7 +402,7 @@ by rewrite -[t in RHS]FinfunK -codom_ffun.
 Qed.
 
 Lemma card_inj_ffuns D T :
-  #|[set f : {ffun D -> T} | injectiveb f]| = #|T| ^_ #|D|.
+  #|[set f : (@finfun_of D (fun=> T) (Phant (D -> T))) | injectiveb f]| = #|T| ^_ #|D|.
 Proof.
 rewrite -card_inj_ffuns_on; apply: eq_card => f.
 by rewrite 2!inE; case: ffun_onP.
@@ -416,7 +419,7 @@ have [ltTk | lekT] := ltnP #|B| k.
 apply/eqP; rewrite -(eqn_pmul2r (fact_gt0 k)) bin_ffact // eq_sym.
 rewrite -sum_nat_cond_const -{1 3}(card_ord k).
 rewrite -card_inj_ffuns_on -sum1dep_card.
-pose imIk (f : {ffun 'I_k -> T}) := f @: 'I_k.
+set imIk := fun (f : {ffun 'I_k -> T}) => f @: 'I_k.
 rewrite (partition_big imIk (fun A => (A \subset B) && (#|A| == k))) /=
   => [|f]; last first.
   move=> /andP [/ffun_onP f_ffun /injectiveP inj_f].
@@ -427,8 +430,8 @@ have [f0 inj_f0 im_f0]: exists2 f, injective f & f @: 'I_k = A.
   rewrite -cardAk; exists enum_val; first exact: enum_val_inj.
   apply/setP=> a; apply/imsetP/idP=> [[i _ ->] | Aa]; first exact: enum_valP.
   by exists (enum_rank_in Aa a); rewrite ?enum_rankK_in.
-rewrite (reindex (fun p : {ffun _} => [ffun i => f0 (p i)])) /=; last first.
-  pose ff0' f i := odflt i [pick j | f i == f0 j].
+rewrite (reindex  (fun p : @finfun_of _ (fun=> _) (Phant (_ -> _)) => [ffun i => f0 (p i)])) /=; last first.
+  set ff0' := fun f i => odflt i [pick j | f i == f0 j].
   exists (fun f => [ffun i => ff0' f i]) => [p _ | f].
     apply/ffunP=> i; rewrite ffunE /ff0'; case: pickP => [j | /(_ (p i))].
       by rewrite ffunE (inj_eq inj_f0) => /eqP.
@@ -442,7 +445,7 @@ rewrite -andbA.
 apply/and3P/injectiveP=> [[_ /injectiveP inj_f0p _] i j eq_pij | inj_p].
   by apply: inj_f0p; rewrite !ffunE eq_pij.
 set f := finfun _.
-have injf: injective f by move=> i j /[!ffunE] /inj_f0; apply: inj_p.
+have injf: injective f by move=> i j; rewrite !ffunE => /inj_f0; apply: inj_p.
 have imIkf : imIk f == A.
   rewrite eqEcard card_imset // cardAk card_ord leqnn andbT -im_f0.
   by apply/subsetP=> x /imsetP[i _ ->]; rewrite ffunE imset_f.
@@ -462,8 +465,8 @@ have [-> | n_gt0] := posnP n; last pose i0 := Ordinal n_gt0.
   case: m => [|m]; last by apply: eq_card0; case/tupleP=> [[]].
   by apply: (@eq_card1 _ [tuple]) => t; rewrite [t]tuple0 inE.
 rewrite -[n in RHS]card_ord -card_draws.
-pose f_t (t : m.-tuple 'I_n) := [set i in t].
-pose f_A (A : {set 'I_n}) := [tuple of mkseq (nth i0 (enum A)) m].
+set f_t := fun (t : m.-tuple 'I_n) => [set i in t].
+set f_A := fun (A : {set 'I_n}) => [tuple of mkseq (nth i0 (enum A)) m] : (m.-tuple 'I_n : subType _).
 have val_fA (A : {set 'I_n}) : #|A| = m -> val (f_A A) = enum A.
   by move=> Am; rewrite -[enum _](mkseq_nth i0) -cardE Am.
 have inc_A (A : {set 'I_n}) : sorted ltn (map val (enum A)).
@@ -475,9 +478,12 @@ rewrite -!sum1dep_card (reindex_onto f_t f_A) /= => [|A]; last first.
 apply: eq_bigl => t.
 apply/idP/idP => [inc_t|/andP [/eqP t_m /eqP <-]]; last by rewrite val_fA.
 have ft_m: #|f_t t| = m.
-  rewrite cardsE (card_uniqP _) ?size_tuple // -(map_inj_uniq val_inj).
+  rewrite cardsE (card_uniqP _) ?size_tuple //.
+  rewrite -(map_inj_uniq [elaborate @val_inj _ _ 'I_n] _).
   exact: (sorted_uniq ltn_trans ltnn).
-rewrite ft_m eqxx -val_eqE val_fA // -(inj_eq (inj_map val_inj)) /=.
+  rewrite ft_m eqxx.
+  rewrite -(@val_eqE _ _ [elaborate m.-tuple 'I_n : subEqType _]).
+  rewrite [X in X == _]val_fA// -(inj_eq (@inj_map _ _ _ [elaborate @val_inj _ _ 'I_n])) /=.
 apply/eqP/(irr_sorted_eq ltn_trans ltnn) => // y.
 by apply/mapP/mapP=> [] [x t_x ->]; exists x; rewrite // mem_enum inE in t_x *.
 Qed.
@@ -493,7 +499,8 @@ pose add_mn_nat (t : m.-tuple In1) i := i + nth x0 t i.
 have add_mnC t: val \o add_mn t =1 add_mn_nat t \o val.
   by move=> i; rewrite /= (tnth_nth x0).
 pose f_add t := [tuple of map (add_mn t) (ord_tuple m)].
-rewrite -card_ltn_sorted_tuples -!sum1dep_card (reindex f_add) /=.
+rewrite -card_ltn_sorted_tuples -!sum1dep_card.
+rewrite (@reindex _ _ _ _ (m.-tuple 'I_n.+1) f_add) /=.
   apply: eq_bigl => t; rewrite -map_comp (eq_map (add_mnC t)) map_comp.
   rewrite enumT unlock val_ord_enum -[in LHS](drop0 t).
   have [m0 | m_gt0] := posnP m.
@@ -517,7 +524,7 @@ pose y0 := tnth t i; rewrite (tnth_nth y0) -(nth_map _ (val i)) ?size_tuple //.
 case def_e: (map _ _) => [|x e] /=; first by rewrite nth_nil ?leq_addr.
 set nth_i := nth (i : nat); rewrite def_e in inc_t; split.
   have: i < size (x :: e) by rewrite -def_e size_map size_tuple ltn_ord.
-  elim: (val i) => //= j IHj lt_j_e.
+  elim: [elaborate val i] => //= j IHj lt_j_e.
   by apply: leq_trans (pathP (val i) inc_t _ lt_j_e); rewrite ltnS IHj 1?ltnW.
 move: (_ - _) (subnK (valP i)) => k /=.
 elim: k (val i) => /= [|k IHk] j; rewrite -ltnS -addSn ?add0n => def_m.

@@ -1224,7 +1224,7 @@ Proof. by move=> y; rewrite /image_mem -filter_map /= mem_filter -enumT. Qed.
 Lemma bij_on_codom (x0 : T) : {on [pred y in codom f], bijective f}.
 Proof.
 pose g y := iinv (valP (insigd (codom_f x0) y)).
-by exists g => [x fAfx | y fAy]; first apply: injf; rewrite f_iinv insubdK.
+by exists g => [x fAfx | y fAy]; first apply: injf; rewrite f_iinv [LHS]insubdK.
 Qed.
 
 Lemma bij_on_image A (x0 : T) : {on [pred y in image f A], bijective f}.
@@ -1415,7 +1415,7 @@ move=> fK x; rewrite count_uniq_mem ?undup_uniq // mem_undup.
 by rewrite mem_pmap -fK map_f // -enumT mem_enum.
 Qed.
 
-Definition PCanIsFinite g fK := @isFinite.Build _ _ (@pcan_enumP g fK).
+Definition PCanIsFinite g fK := @isFinite.Build eT _ (@pcan_enumP g fK).
 
 Definition CanIsFinite g (fK : cancel f g) := PCanIsFinite (can_pcan fK).
 
@@ -1446,7 +1446,7 @@ Implicit Type sT : subFinType P.
 
 Lemma codom_val sT x : (x \in codom (val : sT -> T)) = P x.
 Proof.
-by apply/codomP/idP=> [[u ->]|Px]; last exists (Sub x Px); rewrite ?valP ?SubK.
+by apply/codomP/idP=> [[u ->]|Px]; last exists (Sub x Px); rewrite ?valP ?[RHS]SubK.
 Qed.
 
 End SubFinType.

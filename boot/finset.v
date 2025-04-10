@@ -133,7 +133,7 @@ Section SetType.
 
 Variable T : finType.
 
-Inductive set_type : predArgType := FinSet of {ffun pred T}.
+Inductive set_type : predArgType := FinSet of @finfun_of T (fun=> bool) (Phant (T -> bool)).
 Definition finfun_of_set A := let: FinSet f := A in f.
 Definition set_of := set_type.
 Identity Coercion type_of_set_of : set_of >-> set_type.
@@ -180,7 +180,7 @@ Canonical finset_unlock := Unlockable finset.unlock.
 (* coercion chaining code.                                                    *)
 HB.lock
 Definition pred_of_set T (A : set_type T) : fin_pred_sort (predPredType T)
-:= val A.
+  := (val A : @finfun_of _ (fun=> bool) _).
 Canonical pred_of_set_unlock := Unlockable pred_of_set.unlock.
 
 Notation "[ 'set' x : T | P ]" := (finset (fun x : T => P%B))
@@ -1567,7 +1567,7 @@ Qed.
 
 Lemma big_setU1 a A F : a \notin A ->
   \big[aop/idx]_(i in a |: A) F i = aop (F a) (\big[aop/idx]_(i in A) F i).
-Proof. by move=> notAa; rewrite (@big_setD1 a) ?setU11 //= setU1K. Qed.
+Proof. by move=> notAa; rewrite [LHS](@big_setD1 a) ?setU11 //= setU1K. Qed.
 
 Lemma big_subset_idem_cond A B P F :
     idempotent_op aop ->
@@ -1604,9 +1604,9 @@ Proof. by rewrite -3!big_condT; apply: big_setU_cond. Qed.
 Lemma big_imset h (A : {pred I}) G : {in A &, injective h} ->
   \big[aop/idx]_(j in h @: A) G j = \big[aop/idx]_(i in A) G (h i).
 Proof.
-move=> injh; pose hA := mem (image h A).
+move=> injh; set hA := mem (image h A).
 rewrite (eq_bigl hA) => [|j]; last exact/imsetP/imageP.
-pose h' := omap (fun u : {j | hA j} => iinv (svalP u)) \o insub.
+set h' := omap (fun u : {j | hA j} => iinv (svalP u)) \o insub.
 rewrite (reindex_omap h h') => [|j hAj]; rewrite {}/h'/= ?insubT/= ?f_iinv//.
 apply: eq_bigl => i; case: insubP => [u /= -> def_u | nhAhi]; last first.
   by apply/andP/idP => [[]//| Ai]; case/imageP: nhAhi; exists i.
@@ -1644,7 +1644,7 @@ rewrite bigA_distr_bigA.
 set f := fun J : {set I} => val J.
 transitivity (\big[add/zero]_(f0 in (imset f (mem setT)))
                 \big[mul/one]_i (if f0 i then F i else G i)).
-  suff <-: setT = imset f (mem setT) by apply: congr_big=>// i; rewrite in_setT.
+  suff <-: [elaborate setT = imset f (mem setT)] by apply: congr_big=>// i; rewrite in_setT.
   apply/esym/eqP; rewrite -subTset; apply/subsetP => b _.
   by apply/imsetP; exists (FinSet b).
 rewrite big_imset; last by case=> g; case=> h _ _; rewrite /f => /= ->.
@@ -1725,7 +1725,7 @@ Lemma can_imset_pre (T : finType) f g (A : {set T}) :
   cancel f g -> f @: A = g @^-1: A :> {set T}.
 Proof.
 move=> fK; apply: can2_imset_pre => // x.
-suffices fx: x \in codom f by rewrite -(f_iinv fx) fK.
+suffices fx: [elaborate x \in codom f] by rewrite -(f_iinv fx) fK.
 exact/(subset_cardP (card_codom (can_inj fK)))/subsetP.
 Qed.
 
@@ -1742,13 +1742,15 @@ Qed.
 
 Lemma card_powerset (T : finType) (A : {set T}) : #|powerset A| = 2 ^ #|A|.
 Proof.
-rewrite -card_bool -(card_pffun_on false) -(card_imset _ val_inj).
-apply: eq_card => f; pose sf := false.-support f; pose D := finset sf.
+rewrite -card_bool -(card_pffun_on false).
+rewrite -(card_imset _ (@val_inj {ffun T -> bool} _ (set_type T : subType _))).
+apply: eq_card => /= f; set sf := false.-support f; set D := finset sf.
 have sDA: (D \subset A) = (sf \subset A) by apply: eq_subset; apply: in_set.
 have eq_sf x : sf x = f x by rewrite /= negb_eqb addbF.
-have valD: val D = f by rewrite /D unlock; apply/ffunP=> x; rewrite ffunE eq_sf.
+(* FIXME: Why do I need this annotation. Without it, Rocq searches for a structure of `subType (set_of T) xpredT` on `set_type T` instead of a `subType {ffun T -> bool} xpredT` structure. *)
+have valD: [elaborate (val : {set T} -> {ffun T -> bool}) D = f] by rewrite /D unlock; apply/ffunP=> x; rewrite ffunE eq_sf.
 apply/imsetP/pffun_onP=> [[B] | [sBA _]]; last by exists D; rewrite // inE ?sDA.
-by rewrite inE -sDA -valD => sBA /val_inj->.
+by rewrite inE -sDA -valD => sBA /(@val_inj {ffun T -> bool} _ {set T})->.
 Qed.
 
 Section FunImageComp.
@@ -1879,7 +1881,7 @@ Qed.
 Lemma bigcup_seq r F : \bigcup_(i <- r) F i = \bigcup_(i in r) F i.
 Proof.
 elim: r => [|i r IHr]; first by rewrite big_nil big_pred0.
-rewrite big_cons {}IHr; case r_i: (i \in r).
+rewrite big_cons {}IHr; case r_i: [elaborate i \in r].
   rewrite (setUidPr _) ?bigcup_sup //.
   by apply: eq_bigl => j /[!inE]; case: eqP => // ->.
 rewrite (bigD1 i (mem_head i r)) /=; congr (_ :|: _).
@@ -2151,7 +2153,8 @@ Proof. by case/and3P. Qed.
 
 Lemma partitionS P D B : partition P D -> B \in P -> B \subset D.
 Proof.
-by move=> partP BP; rewrite -(cover_partition partP); apply: bigcup_max BP _.
+move=> partP BP; rewrite -(cover_partition partP).
+exact: (@bigcup_max _ {set T} _ _ _ _ BP).
 Qed.
 
 Lemma partitionD1 P D B :
@@ -2241,7 +2244,7 @@ Lemma partition_disjoint_bigcup (F : I -> {set T}) E :
   \big[op/idx]_(x in \bigcup_i F i) E x =
     \big[op/idx]_i \big[op/idx]_(x in F i) E x.
 Proof.
-move=> disjF; pose P := [set F i | i in I & F i != set0].
+move=> disjF; set P := [set F i | i in I & F i != set0].
 have trivP: trivIset P.
   apply/trivIsetP=> _ _ /imsetP[i _ ->] /imsetP[j _ ->] neqFij.
   by apply: disjF; apply: contraNneq neqFij => ->.
@@ -2336,7 +2339,8 @@ Proof.
 case/and3P=> /eqP <- tiP notP0; apply/and3P; split; first exact/and3P.
   apply/subsetP=> _ /imsetP[x Px ->]; case: pickP => //= y Pxy.
   by apply/bigcupP; exists (pblock P x); rewrite ?pblock_mem //.
-apply/forall_inP=> B PB; have /set0Pn[x Bx]: B != set0 := memPn notP0 B PB.
+apply/forall_inP=> B PB.
+have /set0Pn[x Bx]: [elaborate B != set0] := memPn notP0 B PB.
 apply/cards1P; exists (odflt x [pick y in pblock P x]); apply/esym/eqP.
 rewrite eqEsubset sub1set !inE -andbA; apply/andP; split.
   by apply/imset_f/bigcupP; exists B.
@@ -2424,7 +2428,7 @@ have sQP E: E \in Q -> {subset E <= P}.
 rewrite /partition cover_imset -(big_trivIset _ tiQ) defP -defG eqxx /= andbC.
 have{} notQ0: set0 \notin cover @: Q.
   apply: contra notP0 => /imsetP[E Q_E E0].
-  have /set0Pn[/= A E_A] := memPn notQ0 E Q_E.
+  have /set0Pn[/= A E_A] := [elaborate memPn notQ0 E Q_E].
   congr (_ \in P): (sQP E Q_E A E_A).
   by apply/eqP; rewrite -subset0 E0 (bigcup_max A).
 rewrite notQ0; apply: trivIimset => // E F Q_E Q_F.
@@ -2465,7 +2469,7 @@ Qed.
 
 Lemma imset_partition : partition fP (f @: D) = partition P D.
 Proof.
-suff cov: (cover fP == f @:D) = (cover P == D).
+suff cov: [elaborate (cover fP == f @:D) = (cover P == D)].
   by rewrite /partition -imset_trivIset imset0mem cov.
 by rewrite /fP cover_imset -imset_cover (inj_eq (imset_inj inj_f)).
 Qed.
@@ -2508,8 +2512,8 @@ Proof. by case/minsetP=> _; apply. Qed.
 
 Lemma ex_minset P : (exists A, P A) -> {A | minset P A}.
 Proof.
-move=> exP; pose pS n := [pred B | P B & #|B| == n].
-pose p n := ~~ pred0b (pS n); have{exP}: exists n, p n.
+move=> exP; set pS := fun n => [pred B | P B & #|B| == n].
+set p := fun n => ~~ pred0b (pS n); have{exP}: exists n, p n.
   by case: exP => A PA; exists #|A|; apply/existsP; exists A; rewrite /= PA /=.
 case/ex_minnP=> n /pred0P; case: (pickP (pS n)) => // A /andP[PA] /eqP <-{n} _.
 move=> minA; exists A => //; apply/minsetP; split=> // B PB sBA; apply/eqP.
@@ -2595,7 +2599,7 @@ Definition fixset := iterF n.
 
 Lemma fixsetK : F fixset = fixset.
 Proof.
-suff /'exists_eqP[x /= e]: [exists k : 'I_n.+1, iterF k == iterF k.+1].
+suff /'exists_eqP[x /= e]: [elaborate [exists k : 'I_n.+1, iterF k == iterF k.+1]].
   by rewrite /fixset -(subnK (leq_ord x)) /iterF iterD iter_fix.
 apply: contraT => /existsPn /(_ (Ordinal _)) /= neq_iter.
 suff iter_big k : k <= n.+1 -> k <= #|iter k F set0|.

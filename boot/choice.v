@@ -450,9 +450,7 @@ rewrite (@extensional _ _ (ft sQ nt)) => [|i].
 by congr (omap _ _); apply: extensional => x /=.
 Qed.
 
-Set Debug "unification".
 HB.instance Definition _ := tagged_hasChoice.
-STOP.
 
 End TagChoice.
 

@@ -247,24 +247,24 @@ Notation family F := (family_mem (fmem F)).
 Section InheritedStructures.
 
 Variable aT : finType.
-Notation dffun_aT rT rS := {dffun forall x : aT, rT x : rS}.
+Notation dffun_aT rT rS := {dffun forall x : aT, rT x}.
 
-#[hnf] HB.instance Definition _ rT := Equality.copy (dffun_aT rT eqType)
+#[hnf] HB.instance Definition _ (rT : aT -> eqType) := Equality.copy {dffun forall x : aT, rT x}
   (pcan_type tfgraphK).
 #[hnf] HB.instance Definition _ (rT : eqType) :=
   Equality.copy {ffun aT -> rT} {dffun forall _, rT}.
 
-#[hnf] HB.instance Definition _ rT := Choice.copy (dffun_aT rT choiceType)
+#[hnf] HB.instance Definition _ (rT : aT -> choiceType) := Choice.copy {dffun forall x : aT, rT x}
   (pcan_type tfgraphK).
 #[hnf] HB.instance Definition _ (rT : choiceType) :=
   Choice.copy {ffun aT -> rT} {dffun forall _, rT}.
 
-#[hnf] HB.instance Definition _ rT := Countable.copy (dffun_aT rT countType)
+#[hnf] HB.instance Definition _ (rT : aT -> countType) := Countable.copy {dffun forall x : aT, rT x}
   (pcan_type tfgraphK).
 #[hnf] HB.instance Definition _ (rT : countType) :=
   Countable.copy {ffun aT -> rT} {dffun forall _, rT}.
 
-#[hnf] HB.instance Definition _ rT := Finite.copy (dffun_aT rT finType)
+#[hnf] HB.instance Definition _ (rT : aT -> finType) := Finite.copy {dffun forall x : aT, rT x}
   (pcan_type tfgraphK).
 #[hnf] HB.instance Definition _ (rT : finType) :=
   Finite.copy {ffun aT -> rT} {dffun forall _, rT}.
@@ -460,7 +460,8 @@ End FinDepTheory.
 Section FinFunTheory.
 
 Variables aT rT : finType.
-Notation fT := {ffun aT -> rT}.
+Let rT' := Finite.sort rT.
+Notation fT := {ffun aT -> rT' : Type}.
 Implicit Types (D : {pred aT}) (R : {pred rT}) (F : aT -> pred rT).
 
 Lemma card_pfamily y0 D F :
