@@ -887,7 +887,7 @@ HB.mixin Record Nmodule_isPzSemiRing R of Nmodule R := {
   mulr0 : right_zero zero mul;
 }.
 
-#[short(type="pzSemiRingType")]
+#[primitive, short(type="pzSemiRingType")]
 HB.structure Definition PzSemiRing :=
   { R of Nmodule_isPzSemiRing R & Nmodule R }.
 
@@ -909,8 +909,10 @@ HB.factory Record isPzSemiRing R of Choice R := {
 }.
 
 HB.builders Context R of isPzSemiRing R.
+#[local]
   HB.instance Definition _ := @isNmodule.Build R
     zero add addrA addrC add0r.
+#[local]
   HB.instance Definition _ := @Nmodule_isPzSemiRing.Build R
     one mul mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0.
 HB.end.
@@ -924,7 +926,7 @@ HB.mixin Record PzSemiRing_isNonZero R of PzSemiRing R := {
   oner_neq0 : @one R != 0
 }.
 
-#[short(type="nzSemiRingType")]
+#[primitive, short(type="nzSemiRingType")]
 HB.structure Definition NzSemiRing :=
   { R of PzSemiRing_isNonZero R & PzSemiRing R }.
 
@@ -958,8 +960,10 @@ HB.factory Record Nmodule_isNzSemiRing R of Nmodule R := {
 }.
 
 HB.builders Context R of Nmodule_isNzSemiRing R.
+#[local]
   HB.instance Definition _ :=
     Nmodule_isPzSemiRing.Build R mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0.
+#[local]
   HB.instance Definition _ := PzSemiRing_isNonZero.Build R oner_neq0.
 HB.end.
 
@@ -1003,8 +1007,10 @@ End isSemiRing.
 Notation isSemiRing R := (isNzSemiRing R) (only parsing).
 
 HB.builders Context R of isNzSemiRing R.
+#[local]
   HB.instance Definition _ := @isNmodule.Build R
     zero add addrA addrC add0r.
+#[local]
   HB.instance Definition _ := @Nmodule_isNzSemiRing.Build R
     one mul mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0 oner_neq0.
 HB.end.
@@ -1063,11 +1069,11 @@ HB.instance Definition _ := Monoid.isAddLaw.Build R *%R +%R mulrDl mulrDr.
 
 Lemma mulr_suml I r P (F : I -> R) x :
   (\sum_(i <- r | P i) F i) * x = \sum_(i <- r | P i) F i * x.
-Proof. exact: big_distrl. Qed.
+Proof. exact: (@big_distrl _ _ _ (+%R : @Monoid.add_law R _ _)). Qed.
 
 Lemma mulr_sumr I r P (F : I -> R) x :
   x * (\sum_(i <- r | P i) F i) = \sum_(i <- r | P i) x * F i.
-Proof. exact: big_distrr. Qed.
+Proof. exact: (@big_distrr _ _ _ (+%R : @Monoid.add_law R _ _)). Qed.
 
 Lemma mulrnAl x y n : (x *+ n) * y = (x * y) *+ n.
 Proof. by elim: n => [|n IHn]; rewrite ?mul0r // !mulrS mulrDl IHn. Qed.
@@ -1189,7 +1195,7 @@ Lemma natrX n k : (n ^ k)%:R = n%:R ^+ k :> R.
 Proof. by rewrite exprMn_n expr1n. Qed.
 
 Lemma mulrI_eq0 x y : lreg x -> (x * y == 0) = (y == 0).
-Proof. by move=> reg_x; rewrite -{1}(mulr0 x) (inj_eq reg_x). Qed.
+Proof. by move=> reg_x; rewrite -{1}(mulr0 x) [LHS](inj_eq reg_x). Qed.
 
 Lemma lreg1 : lreg (1 : R).
 Proof. by move=> x y; rewrite !mul1r. Qed.
@@ -1263,8 +1269,9 @@ Lemma exprDn_comm x y n (cxy : comm x y) :
   (x + y) ^+ n = \sum_(i < n.+1) (x ^+ (n - i) * y ^+ i) *+ 'C(n, i).
 Proof.
 elim: n => [|n IHn]; rewrite big_ord_recl mulr1 ?big_ord0 ?addr0 //=.
-rewrite exprS {}IHn /= mulrDl !big_distrr /= big_ord_recl mulr1 subn0.
-rewrite !big_ord_recr /= !binn !subnn !mul1r !subn0 bin0 !exprS -addrA.
+rewrite exprS {}IHn /= mulrDl !(@big_distrr _ _ _ (+%R : @Monoid.add_law R _ _)) /= big_ord_recl mulr1 subn0.
+rewrite !(@big_ord_recr _ _ (+%R : @Monoid.law (Nmodule.sort R) _))/=.
+rewrite !binn !subnn !mul1r !subn0 bin0 !exprS -addrA.
 congr (_ + _); rewrite addrA -big_split /=; congr (_ + _).
 apply: eq_bigr => i _; rewrite !mulrnAr !mulrA -exprS -subSn ?(valP i) //.
 by rewrite subSS (commrX _ (commr_sym cxy)) -mulrA -exprS -mulrnDr.
@@ -1309,7 +1316,7 @@ Lemma lastr_eq0 (s : seq R) x : x != 0 -> (last x s == 0) = (last 1 s == 0).
 Proof. by case: s => [|y s] /negPf // ->; rewrite oner_eq0. Qed.
 
 Lemma lreg_neq0 x : lreg x -> x != 0.
-Proof. by move=> reg_x; rewrite -[x]mulr1 mulrI_eq0 ?oner_eq0. Qed.
+Proof. by move=> reg_x; rewrite -[x](@mulr1 R) [_ == _]mulrI_eq0 ?oner_eq0. Qed.
 
 Definition pFrobenius_aut p of p \in pchar R := fun x => x ^+ p.
 
@@ -1394,7 +1401,7 @@ End Char2.
 
 End NzSemiRingTheory.
 
-#[short(type="pzRingType")]
+#[primitive, short(type="pzRingType")]
 HB.structure Definition PzRing := { R of PzSemiRing R & Zmodule R }.
 
 HB.factory Record Zmodule_isPzRing R of Zmodule R := {
@@ -1414,6 +1421,7 @@ HB.builders Context R of Zmodule_isPzRing R.
   Proof. by move=> x; apply: (addIr (1 * x)); rewrite -mulrDl !add0r mul1r. Qed.
   Lemma mulr0 : @right_zero R R 0 mul.
   Proof. by move=> x; apply: (addIr (x * 1)); rewrite -mulrDr !add0r mulr1. Qed.
+#[local]
   HB.instance Definition _ := Nmodule_isPzSemiRing.Build R
     mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0.
 HB.end.
@@ -1436,8 +1444,10 @@ HB.factory Record isPzRing R of Choice R := {
 }.
 
 HB.builders Context R of isPzRing R.
+#[local]
   HB.instance Definition _ := @isZmodule.Build R
     zero opp add addrA addrC add0r addNr.
+#[local]
   HB.instance Definition _ := @Zmodule_isPzRing.Build R
     one mul mulrA mul1r mulr1 mulrDl mulrDr.
 HB.end.
@@ -1522,8 +1532,10 @@ End Zmodule_isRing.
 Notation Zmodule_isRing R := (Zmodule_isNzRing R) (only parsing).
 
 HB.builders Context R of Zmodule_isNzRing R.
+#[local]
   HB.instance Definition _ := Zmodule_isPzRing.Build R 
     mulrA mul1r mulr1 mulrDl mulrDr.
+#[local]
   HB.instance Definition _ := PzSemiRing_isNonZero.Build R oner_neq0.
 HB.end.
 
@@ -1556,8 +1568,10 @@ End isRing.
 Notation isRing R := (isNzRing R) (only parsing).
 
 HB.builders Context R of isNzRing R.
+#[local]
   HB.instance Definition _ := @isZmodule.Build R
     zero opp add addrA addrC add0r addNr.
+#[local]
   HB.instance Definition _ := @Zmodule_isNzRing.Build R
     one mul mulrA mul1r mulr1 mulrDl mulrDr oner_neq0.
 HB.end.
@@ -1577,9 +1591,9 @@ Variable R : pzRingType.
 Implicit Types x y : R.
 
 Lemma mulrN x y : x * (- y) = - (x * y).
-Proof. by apply: (addrI (x * y)); rewrite -mulrDr !subrr mulr0. Qed.
+Proof. by apply: (addrI (x * y)); rewrite -(@mulrDr R) !subrr mulr0. Qed.
 Lemma mulNr x y : (- x) * y = - (x * y).
-Proof. by apply: (addrI (x * y)); rewrite -mulrDl !subrr mul0r. Qed.
+Proof. by apply: (addrI (x * y)); rewrite -(@mulrDl R) !subrr mul0r. Qed.
 Lemma mulrNN x y : (- x) * (- y) = x * y.
 Proof. by rewrite mulrN mulNr opprK. Qed.
 Lemma mulN1r x : -1 * x = - x.
@@ -1594,7 +1608,7 @@ Lemma mulrBr x y z : x * (y - z) = x * y - x * z.
 Proof. by rewrite mulrDr mulrN. Qed.
 
 Lemma natrB m n : n <= m -> (m - n)%:R = m%:R - n%:R :> R.
-Proof. exact: mulrnBr. Qed.
+Proof. exact: (@mulrnBr R). Qed.
 
 Lemma commrN x y : comm x y -> comm x (- y).
 Proof. by move=> com_xy; rewrite /comm mulrN com_xy mulNr. Qed.
@@ -1620,7 +1634,7 @@ Lemma signr_addb b1 b2 : (-1) ^+ (b1 (+) b2) = (-1) ^+ b1 * (-1) ^+ b2 :> R.
 Proof. by rewrite mulr_sign; case: b1 b2 => [] []; rewrite ?opprK. Qed.
 
 Lemma signrE (b : bool) : (-1) ^+ b = 1 - b.*2%:R :> R.
-Proof. by case: b; rewrite ?subr0 // opprD addNKr. Qed.
+Proof. by case: b; rewrite ?(@subr0 R) // opprD (@addNKr R). Qed.
 
 Lemma signrN b : (-1) ^+ (~~ b) = - (-1) ^+ b :> R.
 Proof. by case: b; rewrite ?opprK. Qed.
@@ -1649,7 +1663,7 @@ by rewrite mulrBr eq_xy_xz subrr.
 Qed.
 
 Lemma lregN x : lreg x -> lreg (- x).
-Proof. by move=> reg_x y z; rewrite !mulNr => /oppr_inj/reg_x. Qed.
+Proof. by move=> reg_x y z; rewrite !mulNr => /(@oppr_inj R)/reg_x. Qed.
 
 Lemma lreg_sign n : lreg ((-1) ^+ n : R). Proof. exact/lregX/lregN/lreg1. Qed.
 
@@ -1672,21 +1686,23 @@ Lemma subrXX_comm x y n (cxy : comm x y) :
   x ^+ n - y ^+ n = (x - y) * (\sum_(i < n) x ^+ (n.-1 - i) * y ^+ i).
 Proof.
 case: n => [|n]; first by rewrite big_ord0 mulr0 subrr.
-rewrite mulrBl !big_distrr big_ord_recl big_ord_recr /= subnn mulr1 mul1r.
-rewrite subn0 -!exprS opprD -!addrA; congr (_ + _); rewrite addrA -sumrB.
+(* FIXME: This is very silly. *)
+rewrite mulrBl !(@big_distrr _ _ ( *%R : @Monoid.mul_law (R : pzSemiRingType) _) (+%R : @Monoid.add_law R _ [elaborate @mul (@PzSemiRing.Pack R _)])).
+rewrite big_ord_recl big_ord_recr /= subnn mulr1 mul1r.
+rewrite subn0 -!exprS opprD -!addrA; congr (_ + _); rewrite addrA -(@sumrB R).
 rewrite big1 ?add0r // => i _; rewrite !mulrA -exprS -subSn ?(valP i) //.
 by rewrite subSS (commrX _ (commr_sym cxy)) -mulrA -exprS subrr.
 Qed.
 
 Lemma subrX1 x n : x ^+ n - 1 = (x - 1) * (\sum_(i < n) x ^+ i).
 Proof.
-rewrite -!(opprB 1) mulNr -{1}(expr1n _ n).
+rewrite -!(@opprB R 1) mulNr -{1}(expr1n _ n).
 rewrite (subrXX_comm _ (commr_sym (commr1 x))); congr (- (_ * _)).
 by apply: eq_bigr => i _; rewrite expr1n mul1r.
 Qed.
 
 Lemma sqrrB1 x : (x - 1) ^+ 2 = x ^+ 2 - x *+ 2 + 1.
-Proof. by rewrite -sqrrN opprB addrC sqrrD1 sqrrN mulNrn. Qed.
+Proof. by rewrite -[LHS]sqrrN opprB addrC sqrrD1 sqrrN mulNrn. Qed.
 
 Lemma subr_sqr_1 x : x ^+ 2 - 1 = (x - 1) * (x + 1).
 Proof. by rewrite subrX1 !big_ord_recr big_ord0 /= addrAC add0r. Qed.
@@ -1727,7 +1743,7 @@ Variable R : nzRingType.
 Implicit Types x y : R.
 
 Lemma signr_eq0 n : ((-1) ^+ n == 0 :> R) = false.
-Proof. by rewrite -signr_odd; case: odd; rewrite ?oppr_eq0 oner_eq0. Qed.
+Proof. by rewrite -signr_odd; case: odd; rewrite ?(@oppr_eq0 R) (@oner_eq0 R). Qed.
 
 (* FIXME: Generalize to `pzSemiRingType` once `char` has a sensible
    definition. *)
@@ -1822,10 +1838,11 @@ HB.instance Definition _ (R : nzSemiRingType) :=
 HB.instance Definition _ (R : nzRingType) := NzSemiRing.on R^c.
 End ConverseRing.
 
+(* FIXME: Why do I need the second annotation? *)
 Lemma rev_prodr (R : pzSemiRingType)
   (I : Type) (r : seq I) (P : pred I) (E : I -> R) :
-  \prod_(i <- r | P i) (E i : R^c) = \prod_(i <- rev r | P i) E i.
-Proof. by rewrite rev_big_rev. Qed.
+  (\prod_(i <- r | P i) (E i : R^c) : R^c) = \prod_(i <- rev r | P i) E i.
+Proof. by rewrite (@rev_big_rev _ _ ( *%R : @Monoid.law R _)). Qed.
 
 Section SemiRightRegular.
 
@@ -1841,7 +1858,7 @@ Proof. exact: (@lreg1 R^c). Qed.
 Lemma rregM x y : rreg x -> rreg y -> rreg (x * y).
 Proof. by move=> reg_x reg_y; apply: (@lregM R^c). Qed.
 
-Lemma revrX x n : (x : R^c) ^+ n = (x : R) ^+ n.
+Lemma revrX x n : ((x : R^c) ^+ n : R^c) = (x : R) ^+ n.
 Proof. by elim: n => // n IHn; rewrite exprS exprSr IHn. Qed.
 
 Lemma rregX x n : rreg x -> rreg (x ^+ n).
@@ -2244,6 +2261,7 @@ HB.mixin Record isMonoidMorphism (R S : pzSemiRingType) (f : R -> S) := {
   monoid_morphism_subproof : monoid_morphism f
 }.
 
+#[primitive]
 HB.structure Definition RMorphism (R S : pzSemiRingType) :=
   {f of @isNmodMorphism R S f & isMonoidMorphism R S f}.
 (* FIXME: remove the @ once
@@ -2835,7 +2853,7 @@ End SemiRing_hasCommutativeMul.
 Notation SemiRing_hasCommutativeMul R :=
   (PzSemiRing_hasCommutativeMul R) (only parsing).
 
-#[short(type="comPzSemiRingType")]
+#[primitive, short(type="comPzSemiRingType")]
 HB.structure Definition ComPzSemiRing :=
   {R of PzSemiRing R & PzSemiRing_hasCommutativeMul R}.
 
@@ -2859,12 +2877,14 @@ HB.builders Context R of Nmodule_isComPzSemiRing R.
   Definition mulrDr := Monoid.mulC_dist mulrC mulrDl.
   Lemma mulr0 : right_zero zero mul.
   Proof. by move=> x; rewrite mulrC mul0r. Qed.
+#[local]
   HB.instance Definition _ := Nmodule_isPzSemiRing.Build R
     mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0.
+#[local]
   HB.instance Definition _ := PzSemiRing_hasCommutativeMul.Build R mulrC.
 HB.end.
 
-#[short(type="comNzSemiRingType")]
+#[primitive, short(type="comNzSemiRingType")]
 HB.structure Definition ComNzSemiRing :=
   {R of NzSemiRing R & PzSemiRing_hasCommutativeMul R}.
 
@@ -2915,8 +2935,10 @@ HB.builders Context R of Nmodule_isComNzSemiRing R.
   Definition mulrDr := Monoid.mulC_dist mulrC mulrDl.
   Lemma mulr0 : right_zero zero mul.
   Proof. by move=> x; rewrite mulrC mul0r. Qed.
+#[local]
   HB.instance Definition _ := Nmodule_isNzSemiRing.Build R
     mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0 oner_neq0.
+#[local]
   HB.instance Definition _ := PzSemiRing_hasCommutativeMul.Build R mulrC.
 HB.end.
 
@@ -3021,7 +3043,7 @@ End ScaleLinear.
 
 End ComNzSemiRingTheory.
 
-#[short(type="comPzRingType")]
+#[primitive, short(type="comPzRingType")]
 HB.structure Definition ComPzRing := {R of PzRing R & ComPzSemiRing R}.
 
 HB.factory Record PzRing_hasCommutativeMul R of PzRing R := {
@@ -3040,6 +3062,7 @@ Notation Ring_hasCommutativeMul R :=
   (PzRing_hasCommutativeMul R) (only parsing).
 
 HB.builders Context R of PzRing_hasCommutativeMul R.
+#[local]
 HB.instance Definition _ := PzSemiRing_hasCommutativeMul.Build R mulrC.
 HB.end.
 
@@ -3055,8 +3078,10 @@ HB.factory Record Zmodule_isComPzRing R of Zmodule R := {
 HB.builders Context R of Zmodule_isComPzRing R.
   Definition mulr1 := Monoid.mulC_id mulrC mul1r.
   Definition mulrDr := Monoid.mulC_dist mulrC mulrDl.
+#[local]
   HB.instance Definition _ := Zmodule_isPzRing.Build R
     mulrA mul1r mulr1 mulrDl mulrDr.
+#[local]
   HB.instance Definition _ := PzRing_hasCommutativeMul.Build R mulrC.
 HB.end.
 
@@ -3114,8 +3139,10 @@ Notation Zmodule_isComRing R := (Zmodule_isComNzRing R) (only parsing).
 HB.builders Context R of Zmodule_isComNzRing R.
   Definition mulr1 := Monoid.mulC_id mulrC mul1r.
   Definition mulrDr := Monoid.mulC_dist mulrC mulrDl.
+#[local]
   HB.instance Definition _ := Zmodule_isNzRing.Build R
     mulrA mul1r mulr1 mulrDl mulrDr oner_neq0.
+#[local]
   HB.instance Definition _ := PzRing_hasCommutativeMul.Build R mulrC.
 HB.end.
 
@@ -3198,6 +3225,7 @@ HB.builders Context (R : pzRingType) V of Lalgebra_isComAlgebra R V.
 Lemma scalarAr k (x y : V) : k *: (x * y) = x * (k *: y).
 Proof. by rewrite mulrC scalerAl mulrC. Qed.
 
+#[local]
 HB.instance Definition lalgebra_is_algebra : Lalgebra_isAlgebra R V :=
   Lalgebra_isAlgebra.Build R V scalarAr.
 
@@ -3316,7 +3344,7 @@ End Ring_hasMulInverse.
              note="Use NzRing_hasMulInverse instead.")]
 Notation Ring_hasMulInverse R := (NzRing_hasMulInverse R) (only parsing).
 
-#[short(type="unitRingType")]
+#[primitive, short(type="unitRingType")]
 HB.structure Definition UnitRing := {R of NzRing_hasMulInverse R & NzRing R}.
 
 Module UnitRingExports.
@@ -3612,7 +3640,7 @@ Proof. by move=> Uy; rewrite rmorphM /= rmorphV. Qed.
 
 End UnitRingMorphism.
 
-#[short(type="comUnitRingType")]
+#[primitive, short(type="comUnitRingType")]
 HB.structure Definition ComUnitRing := {R of ComNzRing R & UnitRing R}.
 
 Module ComUnitRingExports.
@@ -3647,12 +3675,13 @@ Proof. by move=> x Ux /=; rewrite mulrC mulVx. Qed.
 Fact mulC_unitP x y : y * x = 1 /\ x * y = 1 -> unit x.
 Proof. by case=> yx _; apply: unitPl yx. Qed.
 
+#[local]
 HB.instance Definition _ :=
   NzRing_hasMulInverse.Build R mulVx mulC_mulrV mulC_unitP invr_out.
 
 HB.end.
 
-#[short(type="unitAlgType")]
+#[primitive, short(type="unitAlgType")]
 HB.structure Definition UnitAlgebra R := {V of Algebra R V & UnitRing V}.
 
 Module UnitAlgebraExports.
@@ -3660,7 +3689,7 @@ Bind Scope ring_scope with UnitAlgebra.sort.
 End UnitAlgebraExports.
 HB.export UnitAlgebraExports.
 
-#[short(type="comUnitAlgType")]
+#[primitive, short(type="comUnitAlgType")]
 HB.structure Definition ComUnitAlgebra R := {V of ComAlgebra R V & UnitRing V}.
 
 Module ComUnitAlgebraExports.
@@ -4450,7 +4479,7 @@ HB.mixin Record ComUnitRing_isIntegral R of ComUnitRing R := {
   mulf_eq0_subproof : integral_domain_axiom R;
 }.
 
-#[mathcomp(axiom="integral_domain_axiom"), short(type="idomainType")]
+#[primitive, mathcomp(axiom="integral_domain_axiom"), short(type="idomainType")]
 HB.structure Definition IntegralDomain :=
   {R of ComUnitRing_isIntegral R & ComUnitRing R}.
 
@@ -4595,7 +4624,7 @@ HB.mixin Record UnitRing_isField R of UnitRing R := {
   fieldP : field_axiom R;
 }.
 
-#[mathcomp(axiom="field_axiom"), short(type="fieldType")]
+#[primitive, mathcomp(axiom="field_axiom"), short(type="fieldType")]
 HB.structure Definition Field := { R of IntegralDomain R & UnitRing_isField R }.
 
 Module FieldExports.
@@ -4615,8 +4644,10 @@ HB.factory Record ComUnitRing_isField R of ComUnitRing R := {
   fieldP : field_axiom R;
 }.
 HB.builders Context R of ComUnitRing_isField R.
+#[local]
 HB.instance Definition _ :=
   ComUnitRing_isIntegral.Build R (IdomainMixin fieldP).
+#[local]
 HB.instance Definition _ := UnitRing_isField.Build R fieldP.
 HB.end.
 
@@ -4647,9 +4678,11 @@ Qed.
 Fact inv_out : {in predC (predC1 0), inv =1 id}.
 Proof. by move=> x /negbNE/eqP->; exact: invr0. Qed.
 
+#[local]
 HB.instance Definition _ : ComNzRing_hasMulInverse R :=
   ComNzRing_hasMulInverse.Build R mulVf intro_unit inv_out.
 
+#[local]
 HB.instance Definition _ : ComUnitRing_isField R :=
   ComUnitRing_isField.Build R (fun x x_neq_0 => x_neq_0).
 
@@ -4845,7 +4878,7 @@ HB.mixin Record Field_isDecField R of UnitRing R := {
   satP : decidable_field_axiom sat;
 }.
 
-#[mathcomp(axiom="decidable_field_axiom"), short(type="decFieldType")]
+#[primitive, mathcomp(axiom="decidable_field_axiom"), short(type="decFieldType")]
 HB.structure Definition DecidableField := { F of Field F & Field_isDecField F }.
 
 Module DecFieldExports.
@@ -5024,6 +5057,7 @@ HB.factory Record Field_QE_isDecField F of Field F := {
 }.
 HB.builders Context F of Field_QE_isDecField F.
 
+#[local]
 HB.instance Definition qe_is_def_field : Field_isDecField F :=
   Field_isDecField.Build F (proj_satP wf_proj ok_proj).
 HB.end.
@@ -5037,7 +5071,7 @@ HB.mixin Record DecField_isAlgClosed F of DecidableField F := {
   solve_monicpoly : closed_field_axiom F;
 }.
 
-#[mathcomp(axiom="closed_field_axiom"), short(type="closedFieldType")]
+#[primitive, mathcomp(axiom="closed_field_axiom"), short(type="closedFieldType")]
 HB.structure Definition ClosedField :=
   { F of DecidableField F & DecField_isAlgClosed F }.
 
@@ -5109,11 +5143,11 @@ HB.structure Definition Mul2Closed (R : pzSemiRingType) :=
 HB.structure Definition MulClosed (R : pzSemiRingType) :=
   {S of Mul2Closed R S & isMul1Closed R S}.
 
-#[short(type="semiring2Closed")]
+#[primitive, short(type="semiring2Closed")]
 HB.structure Definition Semiring2Closed (R : pzSemiRingType) :=
   {S of AddClosed R S & Mul2Closed R S}.
 
-#[short(type="semiringClosed")]
+#[primitive, short(type="semiringClosed")]
 HB.structure Definition SemiringClosed (R : pzSemiRingType) :=
   {S of AddClosed R S & MulClosed R S}.
 
@@ -5125,11 +5159,11 @@ HB.structure Definition SmulClosed (R : pzRingType) :=
 HB.structure Definition SubringClosed (R : pzRingType) :=
   {S of ZmodClosed R S & MulClosed R S}.
 
-#[short(type="divClosed")]
+#[primitive, short(type="divClosed")]
 HB.structure Definition DivClosed (R : unitRingType) :=
   {S of MulClosed R S & isInvClosed R S}.
 
-#[short(type="sdivClosed")]
+#[primitive, short(type="sdivClosed")]
 HB.structure Definition SdivClosed (R : unitRingType) :=
   {S of SmulClosed R S & isInvClosed R S}.
 
@@ -5141,11 +5175,11 @@ HB.structure Definition SubmodClosed (R : pzSemiRingType) (V : lSemiModType R)
 HB.structure Definition SubalgClosed (R : pzSemiRingType) (A : lSemiAlgType R)
   := {S of SemiringClosed A S & isScaleClosed R A S}.
 
-#[short(type="divringClosed")]
+#[primitive, short(type="divringClosed")]
 HB.structure Definition DivringClosed (R : unitRingType) :=
   {S of SubringClosed R S & isInvClosed R S}.
 
-#[short(type="divalgClosed")]
+#[primitive, short(type="divalgClosed")]
 HB.structure Definition DivalgClosed (R : pzRingType) (A : unitAlgType R) :=
   {S of DivringClosed A S & isScaleClosed R A S}.
 
@@ -5156,7 +5190,9 @@ HB.factory Record isMulClosed (R : pzSemiRingType) (S : {pred R}) := {
 }.
 
 HB.builders Context R S of isMulClosed R S.
+#[local]
 HB.instance Definition _ := isMul2Closed.Build R S (proj2 rpred1M).
+#[local]
 HB.instance Definition _ := isMul1Closed.Build R S (proj1 rpred1M).
 HB.end.
 
@@ -5165,8 +5201,10 @@ HB.factory Record isSmulClosed (R : pzRingType) (S : R -> bool) := {
 }.
 
 HB.builders Context R S of isSmulClosed R S.
+#[local]
 HB.instance Definition _ := isMulClosed.Build R S
   (smulr_closedM smulr_closed_subproof).
+#[local]
 HB.instance Definition _ := isOppClosed.Build R S
   (smulr_closedN smulr_closed_subproof).
 HB.end.
@@ -5176,8 +5214,10 @@ HB.factory Record isSemiringClosed (R : pzSemiRingType) (S : R -> bool) := {
 }.
 
 HB.builders Context R S of isSemiringClosed R S.
+#[local]
 HB.instance Definition _ := isAddClosed.Build R S
   (semiring_closedD semiring_closed_subproof).
+#[local]
 HB.instance Definition _ := isMulClosed.Build R S
   (semiring_closedM semiring_closed_subproof).
 HB.end.
@@ -5187,8 +5227,10 @@ HB.factory Record isSubringClosed (R : pzRingType) (S : R -> bool) := {
 }.
 
 HB.builders Context R S of isSubringClosed R S.
+#[local]
 HB.instance Definition _ := isZmodClosed.Build R S
   (subring_closedB subring_closed_subproof).
+#[local]
 HB.instance Definition _ := isSmulClosed.Build R S
   (subring_closedM subring_closed_subproof).
 HB.end.
@@ -5198,9 +5240,10 @@ HB.factory Record isDivClosed (R : unitRingType) (S : R -> bool) := {
 }.
 
 HB.builders Context R S of isDivClosed R S.
-#[warning="-HB.no-new-instance"]
+#[local, warning="-HB.no-new-instance"]
 HB.instance Definition _ := isInvClosed.Build R S
   (divr_closedV divr_closed_subproof).
+#[local]
 HB.instance Definition _ := isMulClosed.Build R S
   (divr_closedM divr_closed_subproof).
 HB.end.
@@ -5210,8 +5253,10 @@ HB.factory Record isSdivClosed (R : unitRingType) (S : R -> bool) := {
 }.
 
 HB.builders Context R S of isSdivClosed R S.
+#[local]
 HB.instance Definition _ := isDivClosed.Build R S
   (sdivr_closed_div sdivr_closed_subproof).
+#[local]
 HB.instance Definition _ := isSmulClosed.Build R S
   (sdivr_closedM sdivr_closed_subproof).
 HB.end.
@@ -5234,8 +5279,10 @@ HB.factory Record isSubmodClosed (R : pzRingType) (V : lmodType R)
 }.
 
 HB.builders Context R V S of isSubmodClosed R V S.
+#[local]
 HB.instance Definition _ := isZmodClosed.Build V S
   (submod_closedB submod_closed_subproof).
+#[local]
 HB.instance Definition _ := isScaleClosed.Build R V S
   (subsemimod_closedZ (submod_closed_semi submod_closed_subproof)).
 HB.end.
@@ -5246,8 +5293,10 @@ HB.factory Record isSubalgClosed (R : pzRingType) (A : lalgType R)
 }.
 
 HB.builders Context R A S of isSubalgClosed R A S.
+#[local]
 HB.instance Definition _ := isSubmodClosed.Build R A S
   (subalg_closedZ subalg_closed_subproof).
+#[local]
 HB.instance Definition _ := isSubringClosed.Build A S
   (subalg_closedBM subalg_closed_subproof).
 HB.end.
@@ -5257,8 +5306,10 @@ HB.factory Record isDivringClosed (R : unitRingType) (S : R -> bool) := {
 }.
 
 HB.builders Context R S of isDivringClosed R S.
+#[local]
 HB.instance Definition _ := isSubringClosed.Build R S
   (divring_closedBM divring_closed_subproof).
+#[local]
 HB.instance Definition _ := isSdivClosed.Build R S
   (divring_closed_div divring_closed_subproof).
 HB.end.
@@ -5269,8 +5320,10 @@ HB.factory Record isDivalgClosed (R : comUnitRingType) (A : unitAlgType R)
 }.
 
 HB.builders Context R A S of isDivalgClosed R A S.
+#[local]
 HB.instance Definition _ := isDivringClosed.Build A S
   (divalg_closedBdiv divalg_closed_subproof).
+#[local]
 HB.instance Definition _ := isSubalgClosed.Build R A S
   (divalg_closedZ divalg_closed_subproof).
 HB.end.
@@ -5522,11 +5575,11 @@ End isSubSemiRing.
              note="Use isSubPzSemiRing instead.")]
 Notation isSubSemiRing R S U := (isSubPzSemiRing R S U) (only parsing).
 
-#[short(type="subPzSemiRingType")]
+#[primitive, short(type="subPzSemiRingType")]
 HB.structure Definition SubPzSemiRing (R : pzSemiRingType) (S : pred R) :=
   { U of SubNmodule R S U & PzSemiRing U & isSubPzSemiRing R S U }.
 
-#[short(type="subNzSemiRingType")]
+#[primitive, short(type="subNzSemiRingType")]
 HB.structure Definition SubNzSemiRing (R : nzSemiRingType) (S : pred R) :=
   { U of SubNmodule R S U & NzSemiRing U & isSubPzSemiRing R S U }.
 
@@ -5563,6 +5616,7 @@ HB.factory Record SubNmodule_isSubPzSemiRing (R : pzSemiRingType) S U
 
 HB.builders Context R S U of SubNmodule_isSubPzSemiRing R S U.
 
+#[local]
 HB.instance Definition _ := isMulClosed.Build R S mulr_closed_subproof.
 
 Let inU v Sv : U := Sub v Sv.
@@ -5587,6 +5641,7 @@ Lemma mul0r : left_zero 0%R mulU.
 Proof. by move=> x; apply: val_inj; rewrite SubK val0 mul0r. Qed.
 Lemma mulr0 : right_zero 0%R mulU.
 Proof. by move=> x; apply: val_inj; rewrite SubK val0 mulr0. Qed.
+#[local]
 HB.instance Definition _ := Nmodule_isPzSemiRing.Build U
   mulrA mul1r mulr1 mulrDl mulrDr mul0r mulr0.
 
@@ -5613,15 +5668,17 @@ Notation SubNmodule_isSubSemiRing R S U :=
 
 HB.builders Context R S U of SubNmodule_isSubNzSemiRing R S U.
 
+#[local]
 HB.instance Definition _ := SubNmodule_isSubPzSemiRing.Build R S U
   mulr_closed_subproof.
 
 Lemma oner_neq0 : (1 : U) != 0.
 Proof. by rewrite -(inj_eq val_inj) SubK raddf0 oner_neq0. Qed.
+#[local]
 HB.instance Definition _ := PzSemiRing_isNonZero.Build U oner_neq0.
 HB.end.
 
-#[short(type="subComPzSemiRingType")]
+#[primitive, short(type="subComPzSemiRingType")]
 HB.structure Definition SubComPzSemiRing (R : pzSemiRingType) S :=
   {U of SubPzSemiRing R S U & ComPzSemiRing U}.
 
@@ -5631,10 +5688,11 @@ HB.factory Record SubPzSemiRing_isSubComPzSemiRing (R : comPzSemiRingType) S U
 HB.builders Context R S U of SubPzSemiRing_isSubComPzSemiRing R S U.
 Lemma mulrC : @commutative U U *%R.
 Proof. by move=> x y; apply: val_inj; rewrite !rmorphM mulrC. Qed.
+#[local]
 HB.instance Definition _ := PzSemiRing_hasCommutativeMul.Build U mulrC.
 HB.end.
 
-#[short(type="subComNzSemiRingType")]
+#[primitive, short(type="subComNzSemiRingType")]
 HB.structure Definition SubComNzSemiRing (R : nzSemiRingType) S :=
   {U of SubNzSemiRing R S U & ComNzSemiRing U}.
 
@@ -5684,12 +5742,14 @@ HB.factory Record SubZmodule_isSubPzRing (R : pzRingType) S U
 
 HB.builders Context R S U of SubZmodule_isSubPzRing R S U.
 
+#[local]
 HB.instance Definition _ := isSubringClosed.Build R S subring_closed_subproof.
 
 Let inU v Sv : U := Sub v Sv.
 Let oneU : U := inU (@rpred1 _ (MulClosed.clone R S _)).
 Let mulU (u1 u2 : U) := inU (rpredM _ _ (valP u1) (valP u2)).
 
+#[local]
 HB.instance Definition _ := SubNmodule_isSubPzSemiRing.Build R S U
   (smulr_closedM (subring_closedM subring_closed_subproof)).
 HB.end.
@@ -5732,17 +5792,19 @@ Notation SubZmodule_isSubRing R S U :=
 
 HB.builders Context R S U of SubZmodule_isSubNzRing R S U.
 
+#[local]
 HB.instance Definition _ := isSubringClosed.Build R S subring_closed_subproof.
 
 Let inU v Sv : U := Sub v Sv.
 Let oneU : U := inU (@rpred1 _ (MulClosed.clone R S _)).
 Let mulU (u1 u2 : U) := inU (rpredM _ _ (valP u1) (valP u2)).
 
+#[local]
 HB.instance Definition _ := SubNmodule_isSubNzSemiRing.Build R S U
   (smulr_closedM (subring_closedM subring_closed_subproof)).
 HB.end.
 
-#[short(type="subComPzRingType")]
+#[primitive, short(type="subComPzRingType")]
 HB.structure Definition SubComPzRing (R : pzRingType) S :=
   {U of SubPzRing R S U & ComPzRing U}.
 
@@ -5752,10 +5814,11 @@ HB.factory Record SubPzRing_isSubComPzRing (R : comPzRingType) S U
 HB.builders Context R S U of SubPzRing_isSubComPzRing R S U.
 Lemma mulrC : @commutative U U *%R.
 Proof. by move=> x y; apply: val_inj; rewrite !rmorphM mulrC. Qed.
+#[local]
 HB.instance Definition _ := PzRing_hasCommutativeMul.Build U mulrC.
 HB.end.
 
-#[short(type="subComNzRingType")]
+#[primitive, short(type="subComNzRingType")]
 HB.structure Definition SubComNzRing (R : nzRingType) S :=
   {U of SubNzRing R S U & ComNzRing U}.
 
@@ -5944,7 +6007,7 @@ HB.builders Context (R : pzRingType) (V : algType R) S W
 HB.instance Definition _ := SubLSemiAlgebra_isSubSemiAlgebra.Build R V S W.
 HB.end.
 
-#[short(type="subUnitRingType")]
+#[primitive, short(type="subUnitRingType")]
 HB.structure Definition SubUnitRing (R : nzRingType) (S : pred R) :=
   {U of SubNzRing R S U & UnitRing U}.
 
@@ -5955,6 +6018,7 @@ HB.factory Record SubNzRing_isSubUnitRing (R : unitRingType) S U
 
 HB.builders Context (R : unitRingType) S U of SubNzRing_isSubUnitRing R S U.
 
+#[local]
 HB.instance Definition _ := isDivringClosed.Build R S divring_closed_subproof.
 
 Let inU v Sv : U := Sub v Sv.
@@ -5976,15 +6040,16 @@ Lemma invr_out : {in [pred x | val x \isn't a unit], invU =1 id}.
 Proof.
 by move=> x /[!inE] xNU; apply: val_inj; rewrite SubK invr_out.
 Qed.
+#[local]
 HB.instance Definition _ := NzRing_hasMulInverse.Build U
   mulVr divrr unitrP invr_out.
 HB.end.
 
-#[short(type="subComUnitRingType")]
+#[primitive, short(type="subComUnitRingType")]
 HB.structure Definition SubComUnitRing (R : comUnitRingType) (S : pred R) :=
   {U of SubComNzRing R S U & SubUnitRing R S U}.
 
-#[short(type="subIdomainType")]
+#[primitive, short(type="subIdomainType")]
 HB.structure Definition SubIntegralDomain (R : idomainType) (S : pred R) :=
   {U of SubComNzRing R S U & IntegralDomain U}.
 
@@ -5998,10 +6063,11 @@ Proof.
 move=> x y /(congr1 val)/eqP; rewrite rmorphM /=.
 by rewrite -!(inj_eq val_inj) rmorph0 -mulf_eq0.
 Qed.
+#[local]
 HB.instance Definition _ := ComUnitRing_isIntegral.Build U id.
 HB.end.
 
-#[short(type="subFieldType")]
+#[primitive, short(type="subFieldType")]
 HB.structure Definition SubField (F : fieldType) (S : pred F) :=
   {U of SubIntegralDomain F S U & Field U}.
 
@@ -6015,6 +6081,7 @@ Lemma fieldP : Field.axiom U.
 Proof.
 by move=> u; rewrite -(inj_eq val_inj) rmorph0 -unitfE subfield_subproof.
 Qed.
+#[local]
 HB.instance Definition _ := UnitRing_isField.Build U fieldP.
 HB.end.
 
@@ -6024,8 +6091,10 @@ HB.factory Record SubChoice_isSubPzSemiRing (R : pzSemiRingType) S U
 }.
 
 HB.builders Context (R : pzSemiRingType) S U of SubChoice_isSubPzSemiRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubNmodule.Build R S U
   (semiring_closedD semiring_closed_subproof).
+#[local]
 HB.instance Definition _ := SubNmodule_isSubPzSemiRing.Build R S U
   (semiring_closedM semiring_closed_subproof).
 HB.end.
@@ -6047,8 +6116,10 @@ Notation SubChoice_isSubSemiRing R S U :=
   (SubChoice_isSubNzSemiRing R S U) (only parsing).
 
 HB.builders Context (R : nzSemiRingType) S U of SubChoice_isSubNzSemiRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubNmodule.Build R S U
   (semiring_closedD semiring_closed_subproof).
+#[local]
 HB.instance Definition _ := SubNmodule_isSubNzSemiRing.Build R S U
   (semiring_closedM semiring_closed_subproof).
 HB.end.
@@ -6060,8 +6131,10 @@ HB.factory Record SubChoice_isSubComPzSemiRing (R : comPzSemiRingType) S U
 
 HB.builders Context (R : comPzSemiRingType) S U
   of SubChoice_isSubComPzSemiRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubPzSemiRing.Build R S U
   semiring_closed_subproof.
+#[local]
 HB.instance Definition _ := SubPzSemiRing_isSubComPzSemiRing.Build R S U.
 HB.end.
 
@@ -6084,8 +6157,10 @@ Notation SubChoice_isSubComSemiRing R S U :=
 
 HB.builders Context (R : comNzSemiRingType) S U
   of SubChoice_isSubComNzSemiRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubNzSemiRing.Build R S U
   semiring_closed_subproof.
+#[local]
 HB.instance Definition _ := SubNzSemiRing_isSubComNzSemiRing.Build R S U.
 HB.end.
 
@@ -6094,8 +6169,10 @@ HB.factory Record SubChoice_isSubPzRing (R : pzRingType) S U of SubChoice R S U 
 }.
 
 HB.builders Context (R : pzRingType) S U of SubChoice_isSubPzRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubZmodule.Build R S U
   (subring_closedB subring_closed_subproof).
+#[local]
 HB.instance Definition _ := SubZmodule_isSubPzRing.Build R S U
   subring_closed_subproof.
 HB.end.
@@ -6116,8 +6193,10 @@ Notation SubChoice_isSubRing R S U :=
   (SubChoice_isSubNzRing R S U) (only parsing).
 
 HB.builders Context (R : nzRingType) S U of SubChoice_isSubNzRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubZmodule.Build R S U
   (subring_closedB subring_closed_subproof).
+#[local]
 HB.instance Definition _ := SubZmodule_isSubNzRing.Build R S U
   subring_closed_subproof.
 HB.end.
@@ -6128,8 +6207,10 @@ HB.factory Record SubChoice_isSubComPzRing (R : comPzRingType) S U
 }.
 
 HB.builders Context (R : comPzRingType) S U of SubChoice_isSubComPzRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubPzRing.Build R S U
   subring_closed_subproof.
+#[local]
 HB.instance Definition _ := SubPzRing_isSubComPzRing.Build R S U.
 HB.end.
 
@@ -6150,8 +6231,10 @@ Notation SubChoice_isSubComRing R S U :=
   (SubChoice_isSubComNzRing R S U) (only parsing).
 
 HB.builders Context (R : comNzRingType) S U of SubChoice_isSubComNzRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubNzRing.Build R S U
   subring_closed_subproof.
+#[local]
 HB.instance Definition _ := SubNzRing_isSubComNzRing.Build R S U.
 HB.end.
 
@@ -6175,8 +6258,10 @@ HB.factory Record SubChoice_isSubLmodule (R : pzRingType) (V : lmodType R) S W
 
 HB.builders Context (R : pzRingType) (V : lmodType R) S W
   of SubChoice_isSubLmodule R V S W.
+#[local]
 HB.instance Definition _ := SubChoice_isSubZmodule.Build V S W
   (submod_closedB submod_closed_subproof).
+#[local]
 HB.instance Definition _ := SubZmodule_isSubLmodule.Build R V S W
   submod_closed_subproof.
 HB.end.
@@ -6190,10 +6275,13 @@ HB.factory Record SubChoice_isSubLalgebra (R : pzRingType) (A : lalgType R) S W
 
 HB.builders Context (R : pzRingType) (A : lalgType R) S W
   of SubChoice_isSubLalgebra R A S W.
+#[local]
 HB.instance Definition _ := SubChoice_isSubNzRing.Build A S W
   (subalg_closedBM subalg_closed_subproof).
+#[local]
 HB.instance Definition _ := SubZmodule_isSubLmodule.Build R A S W
   (subalg_closedZ subalg_closed_subproof).
+#[local]
 HB.instance Definition _ := SubNzRing_SubLmodule_isSubLalgebra.Build R A S W.
 HB.end.
 
@@ -6206,8 +6294,10 @@ HB.factory Record SubChoice_isSubAlgebra (R : pzRingType) (A : algType R) S W
 
 HB.builders Context (R : pzRingType) (A : algType R) S W
   of SubChoice_isSubAlgebra R A S W.
+#[local]
 HB.instance Definition _ := SubChoice_isSubLalgebra.Build R A S W
   subalg_closed_subproof.
+#[local]
 HB.instance Definition _ := SubLalgebra_isSubAlgebra.Build R A S W.
 HB.end.
 
@@ -6217,8 +6307,10 @@ HB.factory Record SubChoice_isSubUnitRing (R : unitRingType) S U
 }.
 
 HB.builders Context (R : unitRingType) S U of SubChoice_isSubUnitRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubNzRing.Build R S U
   (divring_closedBM divring_closed_subproof).
+#[local]
 HB.instance Definition _ := SubNzRing_isSubUnitRing.Build R S U
   divring_closed_subproof.
 HB.end.
@@ -6230,8 +6322,10 @@ HB.factory Record SubChoice_isSubComUnitRing (R : comUnitRingType) S U
 
 HB.builders Context (R : comUnitRingType) S U
   of SubChoice_isSubComUnitRing R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubComNzRing.Build R S U
   (divring_closedBM divring_closed_subproof).
+#[local]
 HB.instance Definition _ := SubNzRing_isSubUnitRing.Build R S U
   divring_closed_subproof.
 HB.end.
@@ -6243,8 +6337,10 @@ HB.factory Record SubChoice_isSubIntegralDomain (R : idomainType) S U
 
 HB.builders Context (R : idomainType) S U
   of SubChoice_isSubIntegralDomain R S U.
+#[local]
 HB.instance Definition _ := SubChoice_isSubComUnitRing.Build R S U
   divring_closed_subproof.
+#[local]
 HB.instance Definition _ := SubComUnitRing_isSubIntegralDomain.Build R S U.
 HB.end.
 

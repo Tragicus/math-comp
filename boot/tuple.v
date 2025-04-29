@@ -423,7 +423,7 @@ Variables (n : nat) (T : finType).
 HB.instance Definition _ := isFinite.Build (n.-tuple T) (@FinTuple.enumP n T).
 
 Lemma card_tuple : #|{:n.-tuple T}| = #|T| ^ n.
-Proof. by rewrite [#|_|]cardT enumT unlock FinTuple.size_enum. Qed.
+Proof. by rewrite [LHS]cardT enumT unlock FinTuple.size_enum. Qed.
 
 Lemma enum_tupleP (A : {pred T}) : size (enum A) == #|A|.
 Proof. by rewrite -cardE. Qed.

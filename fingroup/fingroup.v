@@ -290,12 +290,18 @@ Qed.
 Lemma mk_invMg : {morph invg : x y / x * y >-> y * x}.
 Proof.
 have mulgV x: x * x^-1 = 1 by rewrite -{1}[x]mk_invgK mulVg.
-move=> x y /=; rewrite -[y^-1 * _]mul1g -(mulVg (x * y)) -2!mulgA (mulgA y).
+move=> x y /=.
+Set Printing All.
+Check (y^-1 * _).
+About invg.
+rewrite -[y^-1 * _]mul1g -(mulVg (x * y)) -2!mulgA (mulgA y).
 by rewrite mulgV mul1g mulgV -(mulgV (x * y)) mulgA mulVg mul1g.
 Qed.
 
+#[local]
 HB.instance Definition _ :=
   isMulBaseGroup.Build G mulgA mul1g mk_invgK mk_invMg.
+#[local]
 HB.instance Definition _ := BaseFinGroup_isGroup.Build G mulVg.
 
 HB.end.

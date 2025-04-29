@@ -146,6 +146,7 @@ HB.mixin Record hasDecEq T := { eq_op : rel T; eqP : eq_axiom eq_op }.
 #[primitive, mathcomp(axiom="eq_axiom"), short(type="eqType")]
 HB.structure Definition Equality := { T of hasDecEq T }.
 
+
 (* eqE is a generic lemma that can be used to fold back recursive comparisons *)
 (* after using partial evaluation to simplify comparisons on concrete         *)
 (* instances. The eqE lemma can be used e.g. like so: rewrite !eqE /= -!eqE.  *)
@@ -296,16 +297,6 @@ Qed.
 
 Corollary eq_axiomK (T : eqType) (x : T) : all_equal_to (erefl x).
 Proof. by move=> eq_x_x; apply: eq_irrelevance. Qed.
-
-(* We use the module system to circumvent a silly limitation that  *)
-(* forbids using the same constant to coerce to different targets. *)
-Module Type EqTypePredSig.
-Parameter sort : eqType -> predArgType.
-End EqTypePredSig.
-Module MakeEqTypePred (eqmod : EqTypePredSig).
-Coercion eqmod.sort : eqType >-> predArgType.
-End MakeEqTypePred.
-Module Export EqTypePred := MakeEqTypePred eqtype.Equality.
 
 Lemma unit_eqP : Equality.axiom (fun _ _ : unit => true).
 Proof. by do 2!case; left. Qed.

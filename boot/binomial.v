@@ -470,8 +470,8 @@ set f_A := fun (A : {set 'I_n}) => [tuple of mkseq (nth i0 (enum A)) m] : (m.-tu
 have val_fA (A : {set 'I_n}) : #|A| = m -> val (f_A A) = enum A.
   by move=> Am; rewrite -[enum _](mkseq_nth i0) -cardE Am.
 have inc_A (A : {set 'I_n}) : sorted ltn (map val (enum A)).
-  rewrite -[enum _](eq_filter (mem_enum _)).
-  rewrite -(eq_filter (mem_map val_inj _)) -filter_map.
+  rewrite -[enum _](eq_filter (mem_enum _))/=.
+  rewrite -(eq_filter (mem_map (@val_inj _ _ [elaborate 'I_n]) _)) -filter_map.
   by rewrite (sorted_filter ltn_trans) // unlock val_ord_enum iota_ltn_sorted.
 rewrite -!sum1dep_card (reindex_onto f_t f_A) /= => [|A]; last first.
   by move/eqP=> cardAm; apply/setP=> x; rewrite inE -(mem_enum A) -val_fA.
@@ -526,8 +526,8 @@ set nth_i := nth (i : nat); rewrite def_e in inc_t; split.
   have: i < size (x :: e) by rewrite -def_e size_map size_tuple ltn_ord.
   elim: [elaborate val i] => //= j IHj lt_j_e.
   by apply: leq_trans (pathP (val i) inc_t _ lt_j_e); rewrite ltnS IHj 1?ltnW.
-move: (_ - _) (subnK (valP i)) => k /=.
-elim: k (val i) => /= [|k IHk] j; rewrite -ltnS -addSn ?add0n => def_m.
+move: (_ - _) (subnK (@valP _ _ [elaborate 'I_m : subType _] i)) => k /=.
+elim: k (_ i) => /= [|k IHk] j; rewrite -ltnS -addSn ?add0n => def_m.
   by rewrite def_m -def_e /nth_i (nth_map y0) ?ltn_ord // size_tuple -def_m.
 rewrite (leq_trans _ (IHk _ _)) -1?addSnnS //; apply: (pathP _ inc_t).
 rewrite -ltnS (leq_trans (leq_addl k _)) // -addSnnS def_m.
@@ -537,30 +537,32 @@ Qed.
 Lemma card_partial_ord_partitions m n :
   #|[set t : m.-tuple 'I_n.+1 | \sum_(i <- t) i <= n]| = 'C(m + n, m).
 Proof.
-symmetry; set In1 := 'I_n.+1; pose x0 : In1 := ord0.
-pose add_mn (i j : In1) : In1 := inord (i + j).
-pose f_add (t : m.-tuple In1) := [tuple of scanl add_mn x0 t].
-rewrite -card_sorted_tuples -!sum1dep_card (reindex f_add) /=.
+symmetry; pose x0 := @ord0 n.
+pose add_mn (i j : 'I_n.+1) : 'I_n.+1 := inord (i + j).
+pose f_add (t : m.-tuple 'I_n.+1) := [tuple of scanl add_mn x0 t].
+rewrite -card_sorted_tuples -!sum1dep_card.
+rewrite (@reindex _ _ _ _ (m.-tuple 'I_n.+1) f_add) /=.
   apply: eq_bigl => t; rewrite -[\sum_(i <- t) i]add0n.
   transitivity (path leq x0 (map val (f_add t))) => /=; first by case: map.
-  rewrite -{1 2}[0]/(val x0); elim: {t}(val t) (x0) => /= [|x t IHt] s.
+  rewrite -{1 2}[0]/([elaborate val x0]); elim: {t}([elaborate val t]) (x0) => /= [|x t IHt] s.
     by rewrite big_nil addn0 -ltnS ltn_ord.
-  rewrite big_cons addnA IHt /= val_insubd ltnS.
+  rewrite big_cons addnA IHt /=.
+  rewrite (@val_insubd _ _ [elaborate 'I_n.+1 : subType _]) ltnS.
   have [_ | ltn_n_sx] := leqP (s + x) n; first by rewrite leq_addr.
-  rewrite -(leq_add2r x) leqNgt (leq_trans (valP x)) //=.
+  rewrite -(leq_add2r x) leqNgt (leq_trans (@valP _ _ [elaborate 'I_n.+1 : subType _] x)) //=.
   by rewrite leqNgt (leq_trans ltn_n_sx) ?leq_addr.
-pose sub_mn (i j : In1) := Ordinal (leq_ltn_trans (leq_subr i j) (valP j)).
-exists (fun t : m.-tuple In1 => [tuple of pairmap sub_mn x0 t]) => /= t inc_t.
+  set sub_mn := fun (i j : 'I_n.+1) => Ordinal (leq_ltn_trans (leq_subr i j) (@valP _ _ [elaborate 'I_n.+1 : subType _] j)).
+  exists (fun t : m.-tuple 'I_n.+1 => [tuple of pairmap sub_mn x0 t]) => /= t inc_t.
   apply: val_inj => /=; have{inc_t}: path leq x0 (map val (f_add t)).
     by move: inc_t; rewrite inE /=; case: map.
-  rewrite [map _ _]/=; elim: {t}(val t) (x0) => //= x t IHt s.
+    rewrite [map _ _]/=; elim: {t}([elaborate val (t : (m.-tuple 'I_n.+1 : subType _))]) (x0) => //= x t IHt s.
   case/andP=> le_s_sx /IHt->; congr (_ :: _); apply: val_inj => /=.
-  move: le_s_sx; rewrite val_insubd.
+  move: le_s_sx; rewrite (@val_insubd _ _ [elaborate 'I_n.+1 : subType _]).
   case le_sx_n: (_ < n.+1); first by rewrite addKn.
-  by case: (val s) le_sx_n; rewrite ?ltn_ord.
+  by case: ([elaborate val (s : ('I_n.+1 : subType _))]) le_sx_n; rewrite ?ltn_ord.
 apply: val_inj => /=; have{inc_t}: path leq x0 (map val t).
   by move: inc_t; rewrite inE /=; case: map.
-elim: {t}(val t) (x0) => //= x t IHt s /andP[le_s_sx inc_t].
+elim: {t}([elaborate val (t : (m.-tuple 'I_n.+1 : subType _))]) (x0) => //= x t IHt s /andP[le_s_sx inc_t].
 suffices ->: add_mn s (sub_mn s x) = x by rewrite IHt.
 by apply: val_inj; rewrite /add_mn /= subnKC ?inord_val.
 Qed.
@@ -570,7 +572,8 @@ Lemma card_ord_partitions m n :
 Proof.
 symmetry; set In1 := 'I_n.+1; pose x0 : In1 := ord0.
 pose f_add (t : m.-tuple In1) := [tuple of sub_ord (\sum_(x <- t) x) :: t].
-rewrite -card_partial_ord_partitions -!sum1dep_card (reindex f_add) /=.
+rewrite -card_partial_ord_partitions -!sum1dep_card.
+rewrite (@reindex _ _ _ _ (m.-tuple 'I_n.+1) f_add) /=.
   by apply: eq_bigl => t; rewrite big_cons /= addnC (sameP maxn_idPr eqP) maxnE.
 exists (fun t : m.+1.-tuple In1 => [tuple of behead t]) => [t _|].
   exact: val_inj.
