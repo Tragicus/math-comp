@@ -23,7 +23,7 @@ with builtins; with (import <nixpkgs> {}).lib;
 
   ## select an entry to build in the following `bundles` set
   ## defaults to "default"
-  default-bundle = "coq-8.20";
+  default-bundle = "coq-master";
 
   ## write one `bundles.name` attribute set per
   ## alternative configuration, the can be used to
@@ -83,20 +83,21 @@ with builtins; with (import <nixpkgs> {}).lib;
        };
   in {
     "coq-master" = { rocqPackages = {
-      rocq-core.override.version = "master";
+      rocq-core.override.version = "Tragicus:cstc";
       stdlib.override.version = "master";
       bignums.override.version = "master";
-      rocq-elpi.override.version = "master";
+      rocq-elpi.override.version = "Tragicus:cstc";
       rocq-elpi.override.elpi-version = "2.0.7";
+      hierarchy-builder.override.version = "Tragicus:cstc";
       mathcomp.job = false;
       graph-theory.job = false;  # currently broken on Rocq master (c.f., https://github.com/rocq-community/graph-theory/issues/45 )
     }; coqPackages = common-bundles // {
-      coq.override.version = "master";
+      coq.override.version = "Tragicus:cstc";
       stdlib.override.version = "master";
       bignums.override.version = "master";
-      coq-elpi.override.version = "master";
+      coq-elpi.override.version = "Tragicus:cstc";
       coq-elpi.override.elpi-version = "2.0.7";
-      hierarchy-builder.override.version = "master";
+      hierarchy-builder.override.version = "Tragicus:cstc";
       interval.job = false;
       coquelicot.job = false;
       mathcomp-doc.job = false;  # currently broken (it's an unmaintainable pile of scripts)
@@ -104,6 +105,7 @@ with builtins; with (import <nixpkgs> {}).lib;
     }; };
     "coq-9.0".coqPackages = common-bundles // {
       coq.override.version = "9.0";
+      coq-elpi.override.version = "Tragicus:cstc";
       coq-elpi.job = true;
       hierarchy-builder.job = true;
       mathcomp-doc.job = false;  # currently broken (it's an unmaintainable pile of scripts)
