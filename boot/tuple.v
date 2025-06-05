@@ -121,7 +121,7 @@ Notation "[ 'tnth' t i ]" := (tnth t (@Ordinal (tsize t) i (erefl true)))
 
 Canonical nil_tuple T := Tuple (isT : @size T [::] == 0).
 Canonical cons_tuple n T x (t : n.-tuple T) :=
-  Tuple (valP t : size (x :: t) == n.+1).
+  [elaborate Tuple ([elaborate valP t] : size (x :: t) == n.+1)].
 
 Notation "[ 'tuple' x1 ; .. ; xn ]" := [tuple of x1 :: .. [:: xn] ..]
   (format "[ 'tuple' '['  x1 ; '/'  .. ; '/'  xn ']' ]") : form_scope.
@@ -499,7 +499,7 @@ End BseqDef.
 
 Canonical nil_bseq n T := Bseq (isT : @size T [::] <= n).
 Canonical cons_bseq n T x (t : bseq_of n T) :=
-  Bseq (valP t : size (x :: t) <= n.+1).
+  Bseq ([elaborate valP t] : size (x :: t) <= n.+1).
 
 Notation "n .-bseq" := (bseq_of n)
   (at level 2, format "n .-bseq") : type_scope.

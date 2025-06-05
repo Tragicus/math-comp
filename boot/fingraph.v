@@ -935,7 +935,7 @@ Lemma finv_inv : finv (finv f) =1 f.
 Proof. exact: (finv_eq_can (f_finv (@injf))). Qed.
 
 Lemma order_finv : order (finv f) =1 order f.
-Proof. by move=> x; apply: eq_card (@same_fconnect_finv _ _ injf x). Qed.
+Proof. by move=> x; apply: (eq_card (@same_fconnect_finv _ _ (@injf) x)). Qed.
 
 Lemma order_set_finv n : order_set (finv f) n =i order_set f n.
 Proof. by move=> x; rewrite !inE order_finv. Qed.

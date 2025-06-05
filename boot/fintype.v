@@ -1451,8 +1451,8 @@ Qed.
 
 End SubFinType.
 
-HB.factory Record SubCountable_isFinite (T : finType) P (sT : Type)
-  of SubCountable T P sT := { }.
+HB.factory Record SubCountable_isFinite (T : finType) P (sT' : Type)
+  of SubCountable T P sT' := { }.
 
 HB.builders Context (T : finType) (P : pred T) (sT : Type)
   (a : SubCountable_isFinite T P sT).
@@ -1625,7 +1625,7 @@ Lemma extremumP : extremum_spec ord P F extremum.
 Proof.
 rewrite /extremum; case: pickP => [i /andP[Pi /'forall_implyP/= min_i] | no_i].
   by split=> // j; apply/implyP.
-have := sort_sorted ord_total [seq F i | i <- enum P].
+have := [elaborate sort_sorted ord_total [seq F i | i <- enum P]].
 set s := sort _ _ => ss; have s_gt0 : size s > 0
    by rewrite size_sort size_map -cardE; apply/card_gt0P; exists i0.
 pose t0 := nth (F i0) s 0; have: t0 \in s by rewrite mem_nth.
@@ -1742,7 +1742,7 @@ Coercion nat_of_ord i := let: Ordinal m _ := i in m.
 HB.instance Definition _ := [isSub of ordinal for nat_of_ord].
 HB.instance Definition _ := [Countable of ordinal by <:].
 
-Lemma ltn_ord (i : ordinal) : i < n. Proof. exact: valP i. Qed.
+Lemma ltn_ord (i : ordinal) : i < n. Proof. exact: [elaborate valP i]. Qed.
 
 Lemma ord_inj : injective nat_of_ord. Proof. exact: (@val_inj _ _ [elaborate ordinal]). Qed.
 
@@ -2236,7 +2236,7 @@ Local Notation n := n'.+1.
 Definition ord0 := Ordinal (ltn0Sn n').
 Definition ord_max := Ordinal (ltnSn n').
 
-Lemma leq_ord (i : 'I_n) : i <= n'. Proof. exact: valP i. Qed.
+Lemma leq_ord (i : 'I_n) : i <= n'. Proof. exact: [elaborate valP i]. Qed.
 
 Lemma sub_ord_proof m : n' - m < n.
 Proof.  by rewrite ltnS leq_subr. Qed.

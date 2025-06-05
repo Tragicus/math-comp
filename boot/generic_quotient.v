@@ -561,13 +561,16 @@ Lemma pi_DC (x y : D) :
 Proof.
 apply: (iffP idP)=> hxy.
   apply/pi_CD; rewrite /eC /=.
-  by rewrite (equiv_ltrans (encDP _)) (equiv_rtrans (encDP _)) /= encDE.
+  rewrite (equiv_ltrans (encDP _)) (equiv_rtrans (encDP _)) /=.
+  (* FIXME: WHAT??? *)
+  by rewrite [X in is_true X]encDE.
 rewrite -encDE -(equiv_ltrans (encDP _)) -(equiv_rtrans (encDP _)) /=.
 exact/pi_CD.
 Qed.
 
 Lemma equivQTP : cancel (CD \o erepr) (pi \o DC).
-Proof. by move=> x; rewrite /= (pi_CD _ (erepr x) _) ?ereprK /eC /= ?encDP. Qed.
+(* FIXME: WHAT??? *)
+Proof. by move=> x; rewrite /= (pi_CD _ (erepr x) _) ?ereprK /eC //= [X in is_true X]encDP. Qed.
 
 Local Notation qT := (type_of (Phantom (rel D) encD)).
 #[export]

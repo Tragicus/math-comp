@@ -483,9 +483,7 @@ rewrite card_family /image_mem cardT.
 by elim: (enum aT) => //= _ e ->; rewrite expnS.
 Qed.
 
-Elpi Trace.
 Lemma card_ffun : #|fT| = #|rT| ^ #|aT|.
-    STOP.
 Proof. by rewrite -card_ffun_on; apply/esym/eq_card=> f; apply/forallP. Qed.
 
 End FinFunTheory.

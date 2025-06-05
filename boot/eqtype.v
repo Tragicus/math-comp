@@ -298,6 +298,16 @@ Qed.
 Corollary eq_axiomK (T : eqType) (x : T) : all_equal_to (erefl x).
 Proof. by move=> eq_x_x; apply: eq_irrelevance. Qed.
 
+(* We use the module system to circumvent a silly limitation that  *)
+(* forbids using the same constant to coerce to different targets. *)
+Module Type EqTypePredSig.
+Parameter sort : eqType -> predArgType.
+End EqTypePredSig.
+Module MakeEqTypePred (eqmod : EqTypePredSig).
+Coercion eqmod.sort : eqType >-> predArgType.
+End MakeEqTypePred.
+Module Export EqTypePred := MakeEqTypePred eqtype.Equality.
+
 Lemma unit_eqP : Equality.axiom (fun _ _ : unit => true).
 Proof. by do 2!case; left. Qed.
 
@@ -771,9 +781,11 @@ Variables (T : eqType) (P : pred T) (sT : subType P).
 
 Local Notation ev_ax := (fun T v => @Equality.axiom T (fun x y => v x == v y)).
 Lemma val_eqP : ev_ax sT val. Proof. exact: inj_eqAxiom val_inj. Qed.
-
+Elpi Print TC.Solver "mathcomp.boot/tc".
+Elpi Trace.
 #[hnf] HB.instance Definition _ := Equality.copy (sub_type sT) (pcan_type valK).
 
+STOP.
 End SubEqType.
 
 Lemma val_eqE (T : eqType) (P : pred T) (sT : subEqType P)
@@ -878,7 +890,7 @@ Proof. by case: _ / p; apply: taggedK. Qed.
 Definition tagged_with i : pred {i : I & T_ i} := [pred j | tag j == i].
 
 Definition untag_with i (x : {x in tagged_with i}) : T_ i :=
-  etagged (eqP (valP x)).
+  etagged (eqP (valP x : val x \in tagged_with i)).
 Definition tag_with i (t : T_ i) : {x in tagged_with i} :=
   exist _ (Tagged T_ t) (eq_refl i).
 

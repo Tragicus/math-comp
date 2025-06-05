@@ -4670,7 +4670,7 @@ Qed.
 
 Lemma incr_tallyP x : {homo incr_tally^~ x : bs / bs \in wf_tally}.
 Proof.
-move=> bs /andP[]; rewrite unfold_in.
+move=> bs /andP[]; rewrite [_ \is a wf_tally]unfold_in.
 elim: bs => [|[y [|n]] bs IHbs] //= /andP[bs'y Ubs] /[1!inE] /= bs'0.
 have [<- | y'x] /= := eqVneq y; first by rewrite bs'y Ubs.
 rewrite -andbA {}IHbs {Ubs bs'0}// andbT.

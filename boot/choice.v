@@ -376,7 +376,7 @@ Variables (sT : Type) (f : sT -> T).
 Lemma PCanHasChoice f' : pcancel f f' -> hasChoice sT.
 Proof.
 move=> fK; pose liftP sP := [pred x | oapp sP false (f' x)].
-pose sf sP := [fun n => obind f' (find (liftP sP) n)].
+set sf := fun sP => [fun n => obind f' (find (liftP sP) n)].
 exists sf => [sP n x | sP [y sPy] | sP sQ eqPQ n] /=.
 - by case Df: (find _ n) => //= [?] Dx; have:= correct Df; rewrite /= Dx.
 - have [|n Pn] := @complete T (liftP sP); first by exists (f y); rewrite /= fK.
@@ -406,7 +406,7 @@ End SubChoice.
 Fact seq_hasChoice : hasChoice (seq T).
 Proof.
 pose r f := [fun xs => fun x : T => f (x :: xs) : option (seq T)].
-pose fix f sP ns xs {struct ns} :=
+set f := fix f sP ns xs {struct ns} :=
   if ns is n :: ns1 then let fr := r (f sP ns1) xs in obind fr (find fr n)
   else if sP xs then Some xs else None.
 exists (fun sP nn => f sP (dc nn) nil) => [sP n ys | sP [ys] | sP sQ eqPQ n].
@@ -433,8 +433,8 @@ Variables (I : choiceType) (T_ : I -> choiceType).
 Fact tagged_hasChoice : hasChoice {i : I & T_ i}.
 Proof.
 pose mkT i (x : T_ i) := Tagged T_ x.
-pose ft tP n i := omap (mkT i) (find (tP \o mkT i) n).
-pose fi tP ni nt := obind (ft tP nt) (find (ft tP nt) ni).
+set ft := fun tP n i => omap (mkT i) (find (tP \o mkT i) n).
+set fi := fun tP ni nt => obind (ft tP nt) (find (ft tP nt) ni).
 pose f tP n := if dc n is [:: ni; nt] then fi tP ni nt else None.
 exists f => [tP n u | tP [[i x] tPxi] | sP sQ eqPQ n].
 - rewrite /f /fi; case: (dc n) => [|ni [|nt []]] //=.

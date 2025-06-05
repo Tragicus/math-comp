@@ -193,15 +193,15 @@ End ClosedPredicates.
 
 End MagmaTheory.
 
-HB.mixin Record Magma_isSemigroup G of Magma G := {
-  mulgA : associative (@mul G)
+HB.mixin Record Magma_isSemigroup G' of Magma G' := {
+  mulgA : associative (@mul G')
 }.
 
 #[short(type="semigroupType")]
 HB.structure Definition Semigroup := {G of Magma_isSemigroup G & ChoiceMagma G}.
 
-HB.factory Record isSemigroup G of Choice G := {
-  mul : G -> G -> G;
+HB.factory Record isSemigroup G' of Choice G' := {
+  mul : G' -> G' -> G';
   mulgA : associative mul
 }.
 
@@ -272,15 +272,15 @@ End ClosedPredicates.
 
 End baseUMagmaTheory.
 
-HB.mixin Record BaseUMagma_isUMagma G of BaseUMagma G := {
-  mul1g : left_id one (@mul G);
-  mulg1 : right_id one (@mul G)
+HB.mixin Record BaseUMagma_isUMagma G0 of BaseUMagma G0 := {
+  mul1g : left_id one (@mul G0);
+  mulg1 : right_id one (@mul G0)
 }.
 
-HB.factory Record Magma_isUMagma G of Magma G := {
-  one : G;
-  mul1g : left_id one (@mul G);
-  mulg1 : right_id one (@mul G)
+HB.factory Record Magma_isUMagma G1 of Magma G1 := {
+  one : G1;
+  mul1g : left_id one (@mul G1);
+  mulg1 : right_id one (@mul G1)
 }.
 
 HB.builders Context G of Magma_isUMagma G.
@@ -313,8 +313,8 @@ End UMagmaTheory.
 #[short(type="monoidType")]
 HB.structure Definition Monoid := {G of Magma_isUMagma G & Semigroup G}.
 
-HB.factory Record Semigroup_isMonoid G of Semigroup G := {
-  one : G;
+HB.factory Record Semigroup_isMonoid G2 of Semigroup G2 := {
+  one : G2;
   mul1g : left_id one mul;
   mulg1 : right_id one mul
 }.
@@ -325,8 +325,8 @@ HB.instance Definition _ := Magma_isUMagma.Build G mul1g mulg1.
 
 HB.end.
 
-HB.factory Record UMagma_isMonoid G of UMagma G := {
-  mulgA : associative (@mul G)
+HB.factory Record UMagma_isMonoid G4 of UMagma G4 := {
+  mulgA : associative (@mul G4)
 }.
 
 HB.builders Context G of UMagma_isMonoid G.
@@ -335,9 +335,9 @@ HB.instance Definition _ := Magma_isSemigroup.Build G mulgA.
 
 HB.end.
 
-HB.factory Record isMonoid G of Choice G := {
-  mul : G -> G -> G;
-  one : G;
+HB.factory Record isMonoid G5 of Choice G5 := {
+  mul : G5 -> G5 -> G5;
+  one : G5;
   mulgA : associative mul;
   mul1g : left_id one mul;
   mulg1 : right_id one mul
@@ -352,7 +352,7 @@ HB.instance Definition _ := Magma_isUMagma.Build G mul1g mulg1.
 HB.end.
 
 #[export]
-HB.instance Definition _ (G : monoidType) := Monoid.isLaw.Build G 1 *%g mulgA mul1g mulg1.
+HB.instance Definition _ (G : monoidType) := Monoid.isLaw.Build G 1 *%g mulgA (@mul1g G) (@mulg1 G).
 
 Bind Scope group_scope with Monoid.sort.
 
@@ -363,14 +363,14 @@ Implicit Types x y : G.
 
 Lemma expgSr x n : x ^+ n.+1 = x ^+ n * x.
 Proof.
-elim: n => [|n IHn]; first by rewrite mul1g.
-by rewrite expgS [in LHS]IHn expgS mulgA.
+elim: n => [|n IHn]; first by rewrite (@mul1g G).
+by rewrite (@expgS G) [in LHS]IHn (@expgS G) (@mulgA G).
 Qed.
 
 Lemma expgnDr x m n : x ^+ (m + n) = x ^+ m * x ^+ n.
 Proof.
-elim: m => [|m IHm]; first by rewrite mul1g.
-by rewrite 2!expgS IHm mulgA.
+elim: m => [|m IHm]; first by rewrite (@mul1g G).
+by rewrite 2!(@expgS G) IHm (@mulgA G).
 Qed.
 
 Lemma expgnA x m n : x ^+ (m * n) = x ^+ m ^+ n.

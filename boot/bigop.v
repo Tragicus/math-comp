@@ -1648,7 +1648,8 @@ rewrite [RHS]big_mkcond_idem -[RHS](@perm_big _ s).
 rewrite uniq_perm//.
 - by rewrite allpairs_uniq_dep// => [|i|[i j] []]; rewrite ?index_enum_uniq.
 - exact: index_enum_uniq.
-- by move=> [i j]; rewrite ?mem_index_enum; apply/allpairsPdep; exists i, j.
+- move=> [i j]. rewrite mem_index_enum; apply/allpairsPdep; exists i, j.
+  split=> //; exact: mem_index_enum.
 Qed.
 
 Lemma pair_big_dep_idem (I J : finType) (P : pred I) (Q : I -> pred J) F :
