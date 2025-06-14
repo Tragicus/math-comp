@@ -767,12 +767,6 @@ HB.instance Definition _ g (fK : pcancel f g) := Equality.copy (pcan_type fK)
 HB.instance Definition _ g (fK : cancel f g) := Equality.copy (can_type fK)
   (inj_type (can_inj fK)).
 
-Definition deprecated_InjEqMixin f_inj := hasDecEq.Build T (inj_eqAxiom f_inj).
-Definition deprecated_PcanEqMixin g (fK : pcancel f g) :=
-  deprecated_InjEqMixin (pcan_inj fK).
-Definition deprecated_CanEqMixin g (fK : cancel f g) :=
-  deprecated_InjEqMixin (can_inj fK).
-
 End TransferEqType.
 
 Definition sub_type T (P : pred T) (sT : subType P) : Type := sT.
