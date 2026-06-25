@@ -8,7 +8,7 @@ Unset Printing Implicit Defensive.
 Local Open Scope order_scope.
 Local Open Scope nat_scope.
 
-Import Order.POrderTheory Order.TotalTheory Order.LatticeTheoryMeet Order.LatticeTheoryJoin.
+Import Order.POrderTheory Order.TotalTheory Order.LatticeTheory Order.LatticeTheory.
 
 Ltac mp :=
 match goal with
@@ -164,20 +164,20 @@ transitivity false; last by apply/esym/negP => /eqP.
 by apply/negP => /eqP => /(congr1 size)/= /n_Sn.
 Qed.*)
 
-Lemma itvI (d' : unit) (T : orderType d') (a b c d : itv_bound T) :
+Lemma itvI (d' : Order.disp_t) (T : orderType d') (a b c d : itv_bound T) :
   Interval a b `&` Interval c d = Interval (a `|` c) (b `&` d).
 Proof. by []. Qed.
 
-Lemma subitvE (disp : unit) (T : porderType disp) (itv itv' : interval T) :
+Lemma subitvE (disp : Order.disp_t) (T : porderType disp) (itv itv' : interval T) :
   ((itv <= itv') = (itv'.1 <= itv.1) && (itv.2 <= itv'.2))%O.
 Proof. by case: itv; case: itv'. Qed.
 
-Lemma itv_boundlr (disp : unit) (T : porderType disp) (itv : interval T) (x : T) :
+Lemma itv_boundlr (disp : Order.disp_t) (T : porderType disp) (itv : interval T) (x : T) :
   x \in itv = (itv.1 <= BLeft x)%O && (BRight x <= itv.2)%O.
 Proof. by case: itv. Qed.
 
 Section Leo.
-Variables (d : unit) (T : orderType d).
+Variables (d : Order.disp_t) (T : orderType d).
 Implicit Types (n m : option T) (p q : T).
 
 Definition leo n m :=
@@ -225,7 +225,7 @@ Module Avl.
 Module Subdef.
 
 Section Def.
-Variables (d : unit) (elt : orderType d).
+Variables (d : Order.disp_t) (elt : orderType d).
 
 Inductive t : Type :=
   | leaf
@@ -538,7 +538,7 @@ Definition try_concat l r :=
 End Def.
 
 Section Def2.
-Variables (d d' : unit) (elt : orderType d) (elt' : orderType d').
+Variables (d d' : Order.disp_t) (elt : orderType d) (elt' : orderType d').
 
 Fixpoint map (f : elt -> elt') s :=
   match s with
@@ -559,8 +559,71 @@ Fixpoint filter_map (f : elt -> option elt') s :=
 
 End Def2.
 
+Module Sub.
+
+Inductive AccLt (n : nat) : Prop :=
+| AccLt_intro : (forall k, k < n -> AccLt k) -> AccLt n.
+
+Lemma AccLtP (n : nat) : AccLt n.
+Proof.
+elim: n => [|n nacc].
+  exact: AccLt_intro.
+case: (nacc) => ltacc.
+apply: AccLt_intro => k.
+by rewrite ltnS leq_eqVlt => /orP[/eqP -> //|/ltacc].
+Qed.
+
+Section Sub.
+Variables (d : Order.disp_t) (elt : orderType d).
+Local Notation t := (t elt).
+
+(* TOTHINK: Does not compute (at least) because AccLtP is opaque. *)
+Fixpoint well_formed_subdef (x : nat * list elt) (Acc : AccLt x.1) : bool.
+Proof.
+case: Acc => Acc.
+case: (posnP x.1) => [_|x0]; first exact (x.2 == [::]).
+set nl := logn 2 x.1.
+set nr := logn 3 x.1.
+set ll := take nl x.2.
+set lr := drop (nl+1) x.2.
+exact ((size ll == nl) && (size lr == nr) && ((x.1 == 1) || (well_formed_subdef (nl, ll) (Acc nl (ltn_logl 2 x0))) && (well_formed_subdef (nr, lr) (Acc nr (ltn_logl 3 x0))))).
+Defined.
+
+Definition well_formed x := @well_formed_subdef x (AccLtP x.1).
+
+Fixpoint val (s : t) : nat * list elt :=
+  match s with
+  | leaf => (0, [::])
+  | node l x r _ =>
+    let (ln, ll) := val l in
+    let (rn, rl) := val r in
+    (2 ^ ln * 3 ^ rn, ll ++ x :: rl)
+  end.
+
+Fixpoint Sub (x : nat * list elt) (Acc : AccLt x.1) : well_formed_subdef Acc -> t.
+Proof.
+case: Acc => Acc/=.
+case: (posnP x.1) => // x0.
+have [_ _|_ /=] := eqVneq x.1 1; first exact: leaf.
+set nl := logn 2 x.1.
+set nr := logn 3 x.1.
+set ll := take nl x.2.
+set lr := drop (nl+1) x.2 => wf.
+simple refine (node (Sub (Acc nl (ltn_logl 2 x0))) 
+
+  
+
+Axiom Sub : forall x, P x -> t.
+Axiom Sub_rect : forall K : t -> Type, (forall x (Px : P x), K (Sub Px)) -> forall u : t, K u.
+Axiom SubK : forall x (Px : P x), val (Sub Px) = x.
+
+HB.instance Definition _ := isSub.Build (nat * list elt)%type P t Sub_rect SubK.
+HB.instance Definition _ := [Choice of t by <:].
+
+  
+
 Section Theory.
-Variables (d d' : unit) (elt : orderType d) (elt' : orderType d').
+Variables (d d' : Order.disp_t) (elt : orderType d) (elt' : orderType d').
 Implicit Types (s l r : t elt) (x : elt) (itv : interval elt).
 
 Lemma elements_subdefE a s : elements_subdef a s = elements s ++ a.
@@ -2416,7 +2479,7 @@ Qed.
 End Theory.
 
 Section Theory2.
-Variables (d d' : unit) (elt : orderType d) (elt' : orderType d').
+Variables (d d' : Order.disp_t) (elt : orderType d) (elt' : orderType d').
 
 Lemma well_formed_map (f : elt -> elt') s : well_formed s -> well_formed (map f s).
 Proof.
@@ -2479,19 +2542,123 @@ case: (_ < _)%O => [zl|zr]; apply/orP.
   by left; apply/orP; right; apply/IHl; exists z.
 by right; apply/IHr; exists z.
 Qed.
+
+Lemma well_formed_filter_map (f : elt -> option elt') s : well_formed s -> well_formed (filter_map f s).
+Proof.
+elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[_] /IHl lwf /IHr rwf.
+case: (f x) => [y|]; first exact: well_formed_try_join.
+exact: well_formed_try_concat.
+Qed.
+
+Lemma balanced_filter_map (f : elt -> option elt') s : well_formed s -> balanced s -> balanced (filter_map f s).
+Proof.
+elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[_] lwf rwf /andP[]/andP[_] lb rb.
+case: (f x) => [y|].
+  apply: balanced_try_join.
+  - exact: well_formed_filter_map.
+  - exact: well_formed_filter_map.
+  - exact: IHl.
+  - exact: IHr.
+apply: balanced_try_concat.
+- exact: well_formed_filter_map.
+- exact: well_formed_filter_map.
+- exact: IHl.
+- exact: IHr.
+Qed.
+
+Lemma well_ordered_filter_map (f : elt -> option elt') s (itv : interval elt) (itv' : interval elt') : (forall x, x \in itv -> oapp (fun x => x \in itv') true (f x)) -> well_ordered s itv -> well_ordered (filter_map f s) itv'.
+Proof.
+move=> fI; elim: s => [//|l IHl x r IHr h]/= /andP[]/andP[] xI lwo rwo.
+move: fI => /(_ x xI).
+move: xI; rewrite itv_boundlr => /andP[] Ix xI.
+have {}lwo : well_ordered l itv.
+  apply/(well_orderedW _ lwo).
+  rewrite subitvE/= lexx/=.
+  exact/(le_trans _ xI)/lexx.
+have {}rwo : well_ordered r itv.
+  apply/(well_orderedW _ rwo).
+  rewrite subitvE/= lexx/= andbT.
+  exact/(le_trans Ix)/lexx.
+case: (f x) => [y|]/= yI.
+  apply: well_ordered_try_join => //.
+    exact: IHl.
+  exact: IHr.
+apply: well_ordered_try_concat => //.
+  exact: IHl.
+exact: IHr.
+Qed.
+
+Lemma mem_filter_map (f : elt -> option elt') s x : well_formed s -> balanced s -> well_ordered s `]-oo, +oo[ ->
+  reflect (exists y, mem s y /\ Some x = f y) (mem (filter_map f s) x).
+Proof.
+move=> swf sb swo.
+elim: s swf sb swo x => [_ _ _ x|l IHl y r IHr h]/=; first by apply/Bool.ReflectF => -[y] [].
+move=> /andP[]/andP[_] lwf rwf /andP[]/andP[_] lb rb /andP[] lwo rwo x.
+move: (well_orderedWT lwo) (well_orderedWT rwo) => lwo' rwo'.
+move fyE: (f y) => [fy|].
+  rewrite mem_try_join; first last.
+  - apply: (well_ordered_filter_map _ rwo') => z _.
+    by case: (f z).
+  - apply: (well_ordered_filter_map _ lwo') => z _.
+    by case: (f z).
+  - exact/balanced_filter_map.
+  - exact/balanced_filter_map.
+  - exact/well_formed_filter_map.
+  - exact/well_formed_filter_map.
+  move: IHl => /(_ lwf lb lwo') IHl.
+  move: IHr => /(_ rwf rb rwo') IHr.
+  apply/(iffP idP).
+    move=> /orP; case=> [/orP[/eqP ->|/IHl[z][] zl ->]|/IHr[z][] zr ->].
+    - by exists y; rewrite eqxx.
+    - exists z.
+      move: (mem_well_ordered lwo zl); rewrite itv_boundlr/= bnd_simp => ->.
+      by rewrite zl orbT.
+    - exists z.
+      move: (mem_well_ordered rwo zr); rewrite itv_boundlr andbT bnd_simp => /ltW.
+      rewrite leNgt => /negPf ->.
+      by rewrite zr orbT.
+  move=> [z] [+] xz => /orP[/eqP zy|].
+    by rewrite -(inj_eq Some_inj) xz zy fyE eqxx.
+  case: (_ < _)%O => [zl|zr]; apply/orP.
+    by left; apply/orP; right; apply/IHl; exists z.
+  by right; apply/IHr; exists z.
+rewrite mem_try_concat; first last.
+- apply: (well_ordered_filter_map _ rwo') => z _.
+  by case: (f z).
+- apply: (well_ordered_filter_map _ lwo') => z _.
+  by case: (f z).
+- exact/balanced_filter_map.
+- exact/balanced_filter_map.
+- exact/well_formed_filter_map.
+- exact/well_formed_filter_map.
+move: IHl => /(_ lwf lb lwo') IHl.
+move: IHr => /(_ rwf rb rwo') IHr.
+apply/(iffP idP).
+  move=> /orP[/IHl[z][] zl ->|/IHr[z][] zr ->].
+    exists z.
+    move: (mem_well_ordered lwo zl); rewrite itv_boundlr/= bnd_simp => ->.
+    by rewrite zl orbT.
+  exists z.
+  move: (mem_well_ordered rwo zr); rewrite itv_boundlr andbT bnd_simp => /ltW.
+  rewrite leNgt => /negPf ->.
+  by rewrite zr orbT.
+move=> [z] [+] xz => /orP[/eqP zy|].
+  by move: xz; rewrite zy fyE.
+case: (_ < _)%O => [zl|zr]; apply/orP.
+  by left; apply/IHl; exists z.
+by right; apply/IHr; exists z.
+Qed.
     
-  
-
-
+End Theory2.
 
 Module AllExports. HB.reexport. End AllExports.
-
+  
 End Subdef.
 
 Import Subdef.AllExports.
 
 Section Def.
-Variables (d : unit) (elt : orderType d).
+Variables (d : Order.disp_t) (elt : orderType d).
 
 Definition t := {s : Subdef.t elt | Subdef.is_avl s}.
 
@@ -2506,8 +2673,8 @@ by exists (Subdef.singleton x).
 Defined.
 
 Definition add (x : elt) (s : t) : t.
-move: (valP s) => /andP[]/andP[] swf sb swo.
 exists (Subdef.add x (val s)).
+move: (valP s) => /andP[]/andP[] swf sb swo.
 apply/andP; split; [apply/andP; split|].
 - exact/Subdef.well_formed_add.
 - exact/Subdef.balanced_add.
@@ -2515,15 +2682,16 @@ apply/andP; split; [apply/andP; split|].
 Defined.
 
 Definition split (x : elt) (s : t) : t * bool * t.
-move: (valP s) => /andP[]/andP[] swf sb swo.
 split; [split|].
 - exists (Subdef.split x (val s)).1.1.
+  move: (valP s) => /andP[]/andP[] swf sb swo.
   apply/andP; split; [apply/andP; split|].
   + exact/Subdef.well_formed_splitl.
   + exact/Subdef.balanced_splitl.
   + exact/(Subdef.well_orderedWT (Subdef.well_ordered_splitl x swo)).
 - exact/(Subdef.split x (val s)).1.2.
 - exists (Subdef.split x (val s)).2.
+  move: (valP s) => /andP[]/andP[] swf sb swo.
   apply/andP; split; [apply/andP; split|].
   + exact/Subdef.well_formed_splitr.
   + exact/Subdef.balanced_splitr.
@@ -2531,18 +2699,17 @@ split; [split|].
 Defined.
 
 Definition remove (x : elt) (s : t) : t.
-move: (valP s) => /andP[]/andP[] swf sb swo.
 exists (Subdef.remove x (val s)).
+move: (valP s) => /andP[]/andP[] swf sb swo.
 apply/andP; split; [apply/andP; split|].
 - exact/Subdef.well_formed_remove.
-  Search Subdef.remove.
 - exact/Subdef.balanced_remove.
 - exact/Subdef.well_ordered_remove.
 Defined.
 
 Definition union (s u : t) : t.
-move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
 exists (Subdef.union (val s) (val u)).
+move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
 apply/andP; split; [apply/andP; split|].
 - exact/Subdef.well_formed_union.
 - exact/Subdef.balanced_union.
@@ -2550,8 +2717,8 @@ apply/andP; split; [apply/andP; split|].
 Defined.
 
 Definition inter (s u : t) : t.
-move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
 exists (Subdef.inter (val s) (val u)).
+move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
 apply/andP; split; [apply/andP; split|].
 - exact/Subdef.well_formed_inter.
 - exact/Subdef.balanced_inter.
@@ -2561,8 +2728,8 @@ Defined.
 Definition disjoint (s t : t) := Subdef.disjoint (val s) (val t).
 
 Definition diff (s u : t) : t.
-move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
 exists (Subdef.diff (val s) (val u)).
+move: (valP s) (valP u) => /andP[]/andP[] swf sb swo /andP[]/andP[] uwf ub uwo.
 apply/andP; split; [apply/andP; split|].
 - exact/Subdef.well_formed_diff.
 - exact/Subdef.balanced_diff.
@@ -2581,8 +2748,8 @@ Definition all p (s : t) := Subdef.all p (val s).
 Definition has p (s : t) := Subdef.has p (val s).
 
 Definition filter (p : pred elt) (s : t) : t.
-move: (valP s) => /andP[]/andP[] swf sb swo.
 exists (Subdef.filter p (val s)).
+move: (valP s) => /andP[]/andP[] swf sb swo.
 apply/andP; split; [apply/andP; split|].
 - exact/Subdef.well_formed_filter.
 - exact/Subdef.balanced_filter.
@@ -2590,14 +2757,18 @@ apply/andP; split; [apply/andP; split|].
 Defined.
 
 Definition partition (p : pred elt) (s : t) : t * t.
+split.
+  exists (Subdef.partition p (val s)).1.
+  move: (valP s) => /andP[]/andP[] swf.
+  move=> /(Subdef.balanced_partition p swf) /andP[] lb rb.
+  move=> /(Subdef.well_ordered_partition p) /andP[] lo ro.
+  move: swf => /(Subdef.well_formed_partition p) /andP[] lf rf.
+  by apply/andP; split; [apply/andP; split|].
+exists (Subdef.partition p (val s)).2.
 move: (valP s) => /andP[]/andP[] swf.
 move=> /(Subdef.balanced_partition p swf) /andP[] lb rb.
 move=> /(Subdef.well_ordered_partition p) /andP[] lo ro.
 move: swf => /(Subdef.well_formed_partition p) /andP[] lf rf.
-split.
-  exists (Subdef.partition p (val s)).1.
-  by apply/andP; split; [apply/andP; split|].
-exists (Subdef.partition p (val s)).2.
 by apply/andP; split; [apply/andP; split|].
 Defined.
 
@@ -2607,7 +2778,91 @@ Definition elements (s : t) := Subdef.elements (val s).
 
 Definition choose (s : t) := Subdef.choose (val s).
 
+Definition min (s : t) := Subdef.min (val s).
+
+Definition max (s : t) := Subdef.max (val s).
+
 End Def.
+
+Section Def2.
+Variables (d d' : Order.disp_t) (elt : orderType d) (elt' : orderType d').
+
+Definition map (f : elt -> elt') (s : t elt) : t elt'.
+Proof.
+exists (Subdef.map f (val s)).
+move: (valP s) => /andP[]/andP[] swf sb swo.
+apply/andP; split; first (apply/andP; split).
+- exact: Subdef.well_formed_map.
+- exact: Subdef.balanced_map.
+- by apply: Subdef.well_ordered_map; last exact: swo.
+Qed.
+
+Definition filter_map (f : elt -> option elt') (s : t elt) : t elt'.
+Proof.
+exists (Subdef.filter_map f (val s)).
+move: (valP s) => /andP[]/andP[] swf sb swo.
+apply/andP; split; first (apply/andP; split).
+- exact: Subdef.well_formed_filter_map.
+- exact: Subdef.balanced_filter_map.
+apply: Subdef.well_ordered_filter_map; last exact: swo.
+by move=> x _; case: (f x).
+Qed.
+
+End Def2.
+
+Notation "{}" := (empty _).
+Notation "{ x }" := (singleton x).
+Notation "s .+ x" := (add x s) (at level 50).
+Notation "s ./ x" := (split x s) (at level 50).
+Notation "s .- x" := (remove x s) (at level 50).
+Notation "s + t" := (union s t).
+Notation "s * t" := (inter s t).
+Notation "s - t" := (diff s t).
+
+Section Theory.
+Variables (d d' : Order.disp_t) (elt : orderType d) (elt' : orderType d').
+
+HB.instance Definition _ := [Equality of (t elt) by <:].
+
+HB.howto t preorderType.
+
+Lemma is_emptyE (t : t elt) : is_empty t = (t == {}).
+Proof. by case: t. Qed.
+
+Lemma is_emptyP (t : t elt) : reflect (forall x, ~~ mem t x) (is_empty t).
+Proof.
+apply/(iffP idP); case: t => -[]// l x r h savl /(_ x). 
+by rewrite /mem/= eqxx.
+Qed.
+
+Lemma is_empty_empty : is_empty ({} : t elt).
+Proof. by []. Qed.
+
+Lemma is_empty_singleton (x : elt) : ~~ is_empty {x}.
+Proof. by []. Qed.
+
+
+Lemma is_empty_add (x : elt) s : ~~ is_empty (s .+ x).
+Proof.
+apply/negP => /is_emptyP /(_ x).
+rewrite [mem _ _]Subdef.mem_add ?eqxx//.
+by case: s => s /= /andP[] _.
+Qed.
+
+Lemma is_empty_remove (x : elt) s : is_empty (s .- x) = (subset s {x}).
+Proof.
+
+
+Lemma is_empty_union (s t : t elt) : is_empty (s + t) = (is_empty s && is_empty t).
+Proof.
+move: (valP s) (valP t) => /andP[]/andP[] swf sb swo /andP[]/andP[] twf tb two.
+apply/is_emptyP/andP => [st0|[] /is_emptyP s0 /is_emptyP t0 x]; last first.
+  rewrite [mem _ _]Subdef.mem_union// [Subdef.mem _ _](negPf (s0 x)).
+  exact: t0.
+by split; apply/is_emptyP => x; move: st0 => /(_ x); rewrite [mem _ _]Subdef.mem_union// negb_or => /andP[].
+Qed.
+
+Lemma is_empty_inter
 
 End Avl.
 

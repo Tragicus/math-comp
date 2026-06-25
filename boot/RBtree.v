@@ -150,6 +150,13 @@ Fixpoint add_subdef x s :=
 
 Definition add x s := recolor black (add_subdef x s).
 Arguments add : simpl never.
+
+Fixpoint sub_subdef x s :=
+  match s with
+  | leaf => leaf
+  | node l sx r c => 
+
+Definition 
   
 End Def.
 
